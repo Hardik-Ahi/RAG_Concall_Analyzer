@@ -1,0 +1,21 @@
+# LLM & Orchestration
+openai
+anthropic
+pydantic>=2.0
+
+# RAG & Vector Data
+pinecone-client
+rank-bm25
+sentence-transformers
+numpy
+
+# APIs & Web Scraping
+fastapi
+uvicorn
+requests
+beautifulsoup4
+playwright
+
+# Dev Tools
+python-dotenv
+tqdm
