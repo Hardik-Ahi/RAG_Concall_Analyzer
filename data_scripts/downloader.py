@@ -21,9 +21,9 @@ class ScreenerPDFDownloader:
             "Accept-Language": "en-US,en;q=0.5"
         }
 
-    def _get_annual_report_details(self, nse_symbol: str) -> Optional[Tuple[str, str]]:
+    def get_annual_report_url(self, nse_symbol: str) -> Optional[Tuple[str, str]]:
         """
-        Scrapes Screener.in for a specific company symbol to extract the latest official Annual Report link.
+        Scrapes Screener.in for the first official Annual Report link and its label.
         """
         screener_url = f"https://www.screener.in/company/{nse_symbol}/"
         print(f"🔍 Searching Screener.in for symbol: {nse_symbol}...")
@@ -60,15 +60,11 @@ class ScreenerPDFDownloader:
             print(f"❌ Error scraping metadata for {nse_symbol}: {str(e)}")
             return None
 
-    def get_annual_report_url(self, nse_symbol: str) -> Optional[str]:
-        details = self._get_annual_report_details(nse_symbol)
-        return details[0] if details else None
-
     def download_by_ticker(self, nse_symbol: str) -> bool:
         """
         Fully generalized workflow: Looks up the asset link dynamically and downloads it safely.
         """
-        report_details = self._get_annual_report_details(nse_symbol)
+        report_details = self.get_annual_report_url(nse_symbol)
         if not report_details:
             return False
         pdf_url, report_text = report_details
