@@ -88,7 +88,7 @@ class FinancialPDFParser:
                 if tables and len(tables.tables) > 0:
                     # Pull base page text
                     raw_text = page.get_text("text")
-                    page_output += raw_text + "\n\n### Extracted Financial Tables (Preserved Structural Layout)\n"
+                    page_output += raw_text + "\n\n### Extracted Financial Tables ###\n"
                     
                     # Process each isolated grid layout sequentially using coordinate loops
                     for tab in tables.tables:
@@ -110,13 +110,17 @@ class FinancialPDFParser:
 
 if __name__ == "__main__":
     parser = FinancialPDFParser()
-    test_pdf = "raw_data_india/INFY/INFY_Annual_Report.pdf"
+    test_pdf = "financial_data/INFY/INFY_Annual_Report_2026.pdf"
     
     page_data = parser.extract_layout_aware_text(test_pdf)
+    output_path = "page_data_2.json"
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(page_data, f, ensure_ascii=False, indent=2)
+    print(f"💾 Saved parsed page data to {output_path}")
     
     # Verify the output against the table sections
     for page in page_data:
-        if "### Extracted Financial Tables" in page["content"]:
+        if "### Extracted Financial Tables ###" in page["content"]:
             print(f"\n--- VERIFICATION: Precision Text Check on Page {page['page_number']} ---")
-            print(page["content"][-1000:])  # View the newly rendered clipped markdown text block
+            print(page["content"])  # View the newly rendered clipped markdown text block
             break
