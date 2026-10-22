@@ -63,7 +63,7 @@ class FinancialPDFParser:
         with pdfplumber.open(pdf_path) as pdf:
             print(f"📖 Parsing {path_obj.name} with pdfplumber layout layers ({len(pdf.pages)} pages)...")
             
-            for page_num, page in enumerate(pdf.pages[0:10]):  # Process first 10 pages for demonstration
+            for page_num, page in enumerate(pdf.pages[33:35]):  # Process first 10 pages for demonstration
                 # 1. Extract structural grids
                 extracted_tables = page.extract_tables()
                 
@@ -76,7 +76,7 @@ class FinancialPDFParser:
 
                 # 3. If structural grids are detected, format and append them cleanly
                 if extracted_tables:
-                    page_output += "\n\n### Extracted Financial Tables (Preserved Layout via pdfplumber)\n"
+                    page_output += "\n\n### Extracted Financial Tables ###\n"
                     for table in extracted_tables:
                         markdown_table = self._convert_table_to_markdown(table)
                         page_output += markdown_table
@@ -97,9 +97,10 @@ if __name__ == "__main__":
     test_pdf = "financial_data/INFY/INFY_Annual_Report_2026.pdf"
     
     page_data = parser.extract_layout_aware_text(test_pdf)
+    print(page_data)
     
     for page in page_data:
-        if "### Extracted Financial Tables" in page["content"]:
+        if "### Extracted Financial Tables ###" in page["content"]:
             print(f"\n--- SUCCESS: Verifying Page {page['page_number']} Layout Format ---")
             print(page["content"])  # Read out the formatted layout grid
             break
