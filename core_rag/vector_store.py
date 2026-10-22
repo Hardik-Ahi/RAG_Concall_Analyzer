@@ -18,9 +18,9 @@ class LocalVectorStorage:
         
         # 3. Create or fetch our dynamic collection array
         self.collection = self.client.get_or_create_collection(
-            name="indian_financial_transcripts",
+            name="infosys_financial_transcripts",
             embedding_function=self.embedding_fn,
-            metadata={"hnsw:space": "cosine"} # Use cosine similarity for math matching
+            metadata={"hnsw:space": "cosine"} # Use cosine similarity
         )
         print("✅ Local Vector Database & Embedding Layer Connected.")
 
@@ -77,18 +77,18 @@ class LocalVectorStorage:
         return results
 
 if __name__ == "__main__":
-    # Test execution mock loop to prove it functions without spending money!
+    # Test execution mock loop to prove it functions
     db = LocalVectorStorage()
     
     # Let's create a fake child chunk to test the storage pipeline mechanics
     mock_children = [{
         "child_id": "mock-abc-123",
         "parent_id": "parent-xyz-789",
-        "ticker": "RELIANCE",
+        "ticker": "INFOSYS",
         "year": "2025",
         "month": "07",
-        "speaker": "Mukesh Ambani",
-        "enriched_text": "Context: RELIANCE Concall (2025-07) | Speaker: Mukesh Ambani\n---\nWe are accelerating our investments in 5G infrastructure and expect to onboard 50 million new subscribers by year-end."
+        "speaker": "Nandan Nilekani",
+        "enriched_text": "Context: INFOSYS Concall (2025-07) | Speaker: Nandan Nilekani\n---\nWe are accelerating our investments in 5G infrastructure and expect to onboard 50 million new subscribers by year-end."
     }]
     
     db.index_child_chunks(mock_children)
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     print("\n🔍 Running Free Semantic Vector Search Test...")
     search_results = db.query_database(
         query_text="How many subscribers do you expect for 5G?", 
-        ticker="RELIANCE",
+        ticker="INFOSYS",
         top_k=1
     )
     

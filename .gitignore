@@ -5,3 +5,4 @@ __pycache__/
 .DS_Store
 financial_data/
 *.json
+chroma_db/
