@@ -31,7 +31,7 @@ class FinancialPDFParser:
                 if len(text_content.strip()) > 20:
                     parsed_pages.append({
                         "page_number": page_num + 1,
-                        "raw_text": text_content.strip(),
+                        "content": text_content.strip(),
                         "source_file": path_obj.name
                     })
                     
@@ -49,5 +49,5 @@ if __name__ == "__main__":
     page_data = parser.extract_clean_text(test_pdf)
     if page_data:
         print("\n--- SAMPLE EXTRACT (Page 1) ---")
-        print(page_data[5]["raw_text"])
+        print(page_data[5]["content"])
         print("-------------------------------")

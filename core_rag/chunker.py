@@ -4,9 +4,8 @@ from pathlib import Path
 
 class HierarchicalTranscriptChunker:
     def __init__(self):
-        # Regex to catch speaker names (e.g., "K. Krithivasan:", "Moderator:", "Ravi Sen (Analyst):")
-        # Looks for capitalized words or titles ending with a colon or sitting on a standalone line
-        self.speaker_pattern = re.compile(r'^([A-Z][a-zA-Z\s\.\(\)\-\&\]+):')
+        # Looks for capitalized words or titles sitting on a standalone line (speaker names)
+        self.speaker_pattern = re.compile(r"^[A-Z][a-zA-Z']+\s[A-Z][a-zA-Z']+$")
 
     def _extract_meta_from_filename(self, filename: str) -> dict:
         """
@@ -89,12 +88,12 @@ class HierarchicalTranscriptChunker:
         return parent_chunks
 
 if __name__ == "__main__":
-    # Test execution using our previous PlainTextFinancialParser module
-    from pdf_parser import PlainTextFinancialParser
+    # Test execution using our previous FinancialPDFParser module
+    from pdf_parser import FinancialPDFParser
     
     # Target one of our safely downloaded local files
-    parser = PlainTextFinancialParser()
-    test_pdf_path = "financial_data/TCS/TCS_Concall_2025_07.pdf" # Replace with your actual local file
+    parser = FinancialPDFParser()
+    test_pdf_path = "financial_data/INFY/INFY_Concall_2026_07.pdf" # Replace with your actual local file
     
     if Path(test_pdf_path).exists():
         pages = parser.extract_clean_text(test_pdf_path)
@@ -102,8 +101,9 @@ if __name__ == "__main__":
         
         parents = chunker.build_parent_chunks(pages)
         if parents:
+            index = 5
             print("\n--- SAMPLE PARENT CHUNK (UUID Tracking Proof) ---")
-            print(f"Parent ID: {parents[0]['parent_id']}")
-            print(f"Metadata: Ticker={parents[0]['ticker']} | Date={parents[0]['year']}-{parents[0]['month']}")
-            print(f"Speaker: {parents[0]['speaker']}")
-            print(f"Snippet: {parents[0]['parent_text'][:300]}...")
+            print(f"Parent ID: {parents[index]['parent_id']}")
+            print(f"Metadata: Ticker={parents[index]['ticker']} | Date={parents[index]['year']}-{parents[index]['month']}")
+            print(f"Speaker: {parents[index]['speaker']}")
+            print(f"Snippet: {parents[index]['parent_text']}...")
