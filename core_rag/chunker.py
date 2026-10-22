@@ -54,7 +54,7 @@ class HierarchicalTranscriptChunker:
                             "text": " ".join(current_block_text)
                         })
                     
-                    current_speaker = speaker_match.group(1).strip()
+                    current_speaker = speaker_match.group(0).strip()
                     # Strip the speaker name off the text segment
                     remaining_text = line_str[speaker_match.end():].strip()
                     current_block_text = [remaining_text] if remaining_text else []
@@ -96,14 +96,14 @@ if __name__ == "__main__":
     test_pdf_path = "financial_data/INFY/INFY_Concall_2026_07.pdf" # Replace with your actual local file
     
     if Path(test_pdf_path).exists():
-        pages = parser.extract_clean_text(test_pdf_path)
+        pages = parser.extract_clean_text(test_pdf_path, start_at=2)  # skip first 2 pages of INFY concall
         chunker = HierarchicalTranscriptChunker()
         
         parents = chunker.build_parent_chunks(pages)
         if parents:
-            index = 5
+            index = 1
             print("\n--- SAMPLE PARENT CHUNK (UUID Tracking Proof) ---")
             print(f"Parent ID: {parents[index]['parent_id']}")
             print(f"Metadata: Ticker={parents[index]['ticker']} | Date={parents[index]['year']}-{parents[index]['month']}")
             print(f"Speaker: {parents[index]['speaker']}")
-            print(f"Snippet: {parents[index]['parent_text']}...")
+            print(f"Snippet: {parents[index]['parent_text']}")
