@@ -1,0 +1,105 @@
+import os
+import chromadb
+from chromadb.utils import embedding_functions
+from pathlib import Path
+
+class LocalVectorStorage:
+    def __init__(self, db_dir: str = "chroma_db"):
+        self.db_dir = db_dir
+        
+        # 1. Initialize local persistent Chroma client (Saves files directly to your hard drive)
+        self.client = chromadb.PersistentClient(path=db_dir)
+        
+        # 2. Setup the free BGE Embedding Function (Automatically downloads and runs model locally)
+        print("🧠 Loading local BAAI/bge-small-en-v1.5 embedding model...")
+        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name="BAAI/bge-small-en-v1.5"
+        )
+        
+        # 3. Create or fetch our dynamic collection array
+        self.collection = self.client.get_or_create_collection(
+            name="indian_financial_transcripts",
+            embedding_function=self.embedding_fn,
+            metadata={"hnsw:space": "cosine"} # Use cosine similarity for math matching
+        )
+        print("✅ Local Vector Database & Embedding Layer Connected.")
+
+    def index_child_chunks(self, child_chunks: list[dict]):
+        """
+        Takes our enriched child chunks and upserts them into ChromaDB 
+        along with their metadata filtering payloads.
+        """
+        if not child_chunks:
+            return
+
+        ids = []
+        documents = []
+        metadatas = []
+
+        print(f"📦 Preparing {len(child_chunks)} child vectors for indexing...")
+        for child in child_chunks:
+            ids.append(child["child_id"])
+            # The database embeds the text found inside this field natively
+            documents.append(child["enriched_text"])
+            
+            # Pack all attributes we want to filter on later into the metadata dict
+            metadatas.append({
+                "parent_id": child["parent_id"],
+                "ticker": child["ticker"],
+                "year": str(child["year"]),
+                "month": str(child["month"]),
+                "speaker": child["speaker"]
+            })
+
+        # Batch upload vectors to the local database cluster
+        self.collection.add(
+            ids=ids,
+            documents=documents,
+            metadatas=metadatas
+        )
+        print(f"💾 Vector sync complete! Chunks successfully committed to './{self.db_dir}' folder.")
+
+    def query_database(self, query_text: str, ticker: str = None, year: str = None, top_k: int = 3) -> dict:
+        """
+        Queries the database using semantic search while applying optional hard metadata filters.
+        """
+        # Construct hard filtering constraints if provided
+        where_filter = {}
+        if ticker: where_filter["ticker"] = ticker
+        if year: where_filter["year"] = str(year)
+
+        # Run vector search query
+        results = self.collection.query(
+            query_texts=[query_text],
+            n_results=top_k,
+            where=where_filter if where_filter else None
+        )
+        return results
+
+if __name__ == "__main__":
+    # Test execution mock loop to prove it functions without spending money!
+    db = LocalVectorStorage()
+    
+    # Let's create a fake child chunk to test the storage pipeline mechanics
+    mock_children = [{
+        "child_id": "mock-abc-123",
+        "parent_id": "parent-xyz-789",
+        "ticker": "RELIANCE",
+        "year": "2025",
+        "month": "07",
+        "speaker": "Mukesh Ambani",
+        "enriched_text": "Context: RELIANCE Concall (2025-07) | Speaker: Mukesh Ambani\n---\nWe are accelerating our investments in 5G infrastructure and expect to onboard 50 million new subscribers by year-end."
+    }]
+    
+    db.index_child_chunks(mock_children)
+    
+    # Try querying it with a metadata filter
+    print("\n🔍 Running Free Semantic Vector Search Test...")
+    search_results = db.query_database(
+        query_text="How many subscribers do you expect for 5G?", 
+        ticker="RELIANCE",
+        top_k=1
+    )
+    
+    print("--- SEARCH MATCH FOUND ---")
+    print(search_results["documents"][0][0])
