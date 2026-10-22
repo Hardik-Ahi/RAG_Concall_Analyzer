@@ -53,7 +53,7 @@ if __name__ == "__main__":
     test_pdf = "financial_data/INFY/INFY_Concall_2026_07.pdf"
     
     # Let's inspect the first couple of pages extracted
-    page_data = parser.extract_clean_text(test_pdf)
+    page_data = parser.extract_clean_text(test_pdf, start_at=2)
     if page_data:
         print("\n--- SAMPLE EXTRACT (Page 1) ---")
         print(page_data[5]["content"])

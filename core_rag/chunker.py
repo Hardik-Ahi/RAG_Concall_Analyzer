@@ -87,11 +87,49 @@ class HierarchicalTranscriptChunker:
         print(f"🧩 Successfully synthesized {len(parent_chunks)} structural Parent Chunks.")
         return parent_chunks
 
+    def build_child_chunks(self, parent_chunks: list[dict], chunk_size: int = 150, overlap: int = 40) -> list[dict]:
+        """
+        Slices each parent text into overlapping small child segments.
+        Prepends a strict Context Enrichment Header to ensure accurate vector matching.
+        """
+        child_chunks = []
+
+        for parent in parent_chunks:
+            # Tokenise/split text into words
+            words = parent["parent_text"].split()
+
+            # Sliding window execution logic loop (works also on len(words) < chunk_size [slicing handles it])
+            start_idx = 0
+            while start_idx < len(words):
+                end_idx = start_idx + chunk_size
+                window_words = words[start_idx:end_idx]
+                
+                header = f"Context: {parent['ticker']} Concall ({parent['year']}-{parent['month']}) | Speaker: {parent['speaker']}\n---\n"
+                enriched_text = header + " ".join(window_words)
+                
+                child_chunks.append({
+                    "child_id": str(uuid.uuid4()),
+                    "parent_id": parent["parent_id"],
+                    "ticker": parent["ticker"],
+                    "year": parent["year"],
+                    "month": parent["month"],
+                    "speaker": parent["speaker"],
+                    "enriched_text": enriched_text
+                })
+                
+                # Move window forward by chunk_size minus the overlap window
+                start_idx += (chunk_size - overlap)
+                
+                # Prevent trailing tiny scraps if we reach the end of the text array bounds
+                if start_idx + overlap >= len(words):
+                    break
+
+        print(f"👶 Generated {len(child_chunks)} Enriched Child Chunks across parents.")
+        return child_chunks
+
 if __name__ == "__main__":
-    # Test execution using our previous FinancialPDFParser module
     from pdf_parser import FinancialPDFParser
     
-    # Target one of our safely downloaded local files
     parser = FinancialPDFParser()
     test_pdf_path = "financial_data/INFY/INFY_Concall_2026_07.pdf" # Replace with your actual local file
     
@@ -100,10 +138,20 @@ if __name__ == "__main__":
         chunker = HierarchicalTranscriptChunker()
         
         parents = chunker.build_parent_chunks(pages)
+        children = chunker.build_child_chunks(parents)
+
         if parents:
-            index = 1
+            parents_index = 1
             print("\n--- SAMPLE PARENT CHUNK (UUID Tracking Proof) ---")
-            print(f"Parent ID: {parents[index]['parent_id']}")
-            print(f"Metadata: Ticker={parents[index]['ticker']} | Date={parents[index]['year']}-{parents[index]['month']}")
-            print(f"Speaker: {parents[index]['speaker']}")
-            print(f"Snippet: {parents[index]['parent_text']}")
+            print(f"Parent ID: {parents[parents_index]['parent_id']}")
+            print(f"Metadata: Ticker={parents[parents_index]['ticker']} | Date={parents[parents_index]['year']}-{parents[parents_index]['month']}")
+            print(f"Speaker: {parents[parents_index]['speaker']}")
+            print(f"Snippet: {parents[parents_index]['parent_text']}")
+        
+        if children:
+            children_index = 3
+            print("\n--- SAMPLE ENRICHED CHILD CHUNK PROOF ---")
+            print(f"Child ID: {children[children_index]['child_id']}")
+            print(f"Relational Parent ID Link: {children[children_index]['parent_id']}")
+            print(f"Enriched Text Content:\n{children[children_index]['enriched_text']}")
+            print("----------------------------------------")
