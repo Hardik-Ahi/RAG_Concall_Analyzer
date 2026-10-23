@@ -9,7 +9,7 @@ import re
 # Mute local network SSL warning logs
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-class IndiaTranscriptDownloader:
+class ConcallDownloader:
     def __init__(self, download_dir: str = "financial_data"):
         self.download_dir = Path(download_dir)
         self.download_dir.mkdir(exist_ok=True)
@@ -99,7 +99,7 @@ class IndiaTranscriptDownloader:
         return False
 
 if __name__ == "__main__":
-    downloader = IndiaTranscriptDownloader()
-    target_stocks = ["TCS", "INFY", "RELIANCE"]
+    downloader = ConcallDownloader()
+    target_stocks = ["INFY"]
     for stock in target_stocks:
         downloader.fetch_latest_transcript(stock)
