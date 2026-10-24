@@ -2,10 +2,12 @@ import os
 import chromadb
 from chromadb.utils import embedding_functions
 from pathlib import Path
+from dotenv import load_dotenv
 
 class LocalVectorStorage:
     def __init__(self, db_dir: str = "chroma_db"):
         self.db_dir = db_dir
+        load_dotenv()  # Load HF_TOKEN
         
         # 1. Initialize local persistent Chroma client (Saves files directly to your hard drive)
         self.client = chromadb.PersistentClient(path=db_dir)
