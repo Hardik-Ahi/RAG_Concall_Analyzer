@@ -2,6 +2,7 @@ import re
 import uuid
 from pathlib import Path
 import json
+import os
 
 class HierarchicalTranscriptChunker:
     def __init__(self):

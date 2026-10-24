@@ -14,6 +14,7 @@ class FinancialAgentSwarm:
         if os.path.exists(self.lookup_path):
             with open(self.lookup_path, "r") as f:
                 lookup = json.load(f)
+                print(f"🔍 Resolving Parent ID '{parent_id}' to full speech text...")
                 return lookup.get(parent_id, "[Parent Text Recovery Error]")
         return "[Lookup Database Missing]"
 
@@ -87,20 +88,37 @@ class FinancialAgentSwarm:
             "earnings calls of a stock ticker and compile a sophisticated corporate intelligence briefing.\n\n"
             "Your output MUST follow this strict structured layout:\n"
             "## Executive Synthesis\n"
-            "## Cross-Company Comparative Moat Evaluation\n"
+            "## Cross-Company Comparative Moat Evaluation (skip this if not applicable)\n"
             "## Key Financial & Forward-Looking Risks\n\n"
             "Maintain a professional, objective tone."
         )
         
-        response = ollama.chat(
+        # 1. Expand the local runtime memory buffer to 16,384 tokens via options
+        # 2. Set stream=True to prevent timeout hangs on local CPUs
+        response_stream = ollama.chat(
             model="llama3.2",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Analyze this evidence base:\n\n{raw_evidence}"}
             ],
-            options={"temperature": 0.3}
+            options={
+                "temperature": 0.3,
+                "num_ctx": 16384  # 🌟 Dynamic Context Window Expansion!
+            },
+            stream=True  # 🌟 Active Token Streaming Enabled!
         )
-        return response["message"]["content"]
+        
+        print("\n================== PIPELINE OUTPUT BRIEFING ==================")
+        compiled_full_response = ""
+        
+        # Print tokens dynamically as they arrive from the local engine
+        for chunk in response_stream:
+            token = chunk["message"]["content"]
+            print(token, end="", flush=True)
+            compiled_full_response += token
+            
+        print("\n==============================================================")
+        return compiled_full_response
 
     def analyze_market_landscape(self, analysis_query: str, target_tickers: list[str]) -> str:
         analyst_outputs = {}
