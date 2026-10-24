@@ -54,6 +54,9 @@ def run_end_to_end_pipeline(target_tickers: list[str]):
         all_compiled_parents.extend(parent_chunks)
         all_compiled_children.extend(child_chunks)
 
+    # Save the parent lookup dictionary
+    chunker.save_parent_lookup(all_compiled_parents, storage_path="parent_lookup.json")
+
     # --- PHASE 4: LOCAL VECTOR STORE SYNC ---
     print("\n--- PHASE 4: EMBEDDING GENERATION & DATABASE SYNC ---")
     if all_compiled_children:

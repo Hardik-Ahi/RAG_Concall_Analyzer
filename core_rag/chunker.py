@@ -1,6 +1,7 @@
 import re
 import uuid
 from pathlib import Path
+import json
 
 class HierarchicalTranscriptChunker:
     def __init__(self):
@@ -127,6 +128,24 @@ class HierarchicalTranscriptChunker:
         print(f"👶 Generated {len(child_chunks)} Enriched Child Chunks across parents.")
         return child_chunks
 
+    def save_parent_lookup(self, parent_chunks: list[dict], storage_path: str = "parent_lookup.json"):
+        # Convert list to a fast key-value dictionary mapping parent_id -> parent_text
+        lookup_dict = {p["parent_id"]: p["parent_text"] for p in parent_chunks}
+        
+        # Load existing lookups if they exist so we don't overwrite older runs
+        if os.path.exists(storage_path):
+            try:
+                with open(storage_path, "r") as f:
+                    existing = json.load(f)
+                    lookup_dict.update(existing)
+            except Exception:
+                pass
+                
+        with open(storage_path, "w") as f:
+            json.dump(lookup_dict, f, indent=4)
+        print(f"💾 Relational lookup dictionary saved to '{storage_path}'")
+
+
 if __name__ == "__main__":
     from pdf_parser import FinancialPDFParser
     
@@ -139,6 +158,7 @@ if __name__ == "__main__":
         
         parents = chunker.build_parent_chunks(pages)
         children = chunker.build_child_chunks(parents)
+        chunker.save_parent_lookup(parents, storage_path="parent_lookup.json")
 
         if parents:
             parents_index = 1
