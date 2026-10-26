@@ -3,6 +3,7 @@ import uuid
 from pathlib import Path
 import json
 import os
+from vector_store import LocalVectorStorage
 
 class HierarchicalTranscriptChunker:
     def __init__(self):
@@ -14,13 +15,14 @@ class HierarchicalTranscriptChunker:
         Parses our clean filename convention (e.g., TCS_Concall_2025_07.pdf)
         to extract baseline metadata attributes.
         """
-        meta = {"ticker": "UNKNOWN", "year": "UNKNOWN", "month": "UNKNOWN"}
+        meta = {"ticker": "UNKNOWN", "year": "UNKNOWN", "month": "UNKNOWN", "index": "UNKNOWN"}
         # Regex to pull ticker, year, and month out of the filename format
-        match = re.search(r'([A-Z0-9]+)_Concall_(\d{4}|\d{2}|UNKNOWN)_(\d{2}|UNKNOWN)', filename)
+        match = re.search(r'([A-Z0-9]+)_Concall_(\d{4}|\d{2}|UNKNOWN)_(\d{2}|UNKNOWN)_(\d+|UNKNOWN)', filename)
         if match:
             meta["ticker"] = match.group(1)
             meta["year"] = match.group(2)
             meta["month"] = match.group(3)
+            meta["index"] = match.group(4)  # there might be >1 concalls in one month
         return meta
 
     def build_parent_chunks(self, parsed_pages: list[dict]) -> list[dict]:
@@ -82,6 +84,7 @@ class HierarchicalTranscriptChunker:
                 "ticker": file_meta["ticker"],
                 "year": file_meta["year"],
                 "month": file_meta["month"],
+                "index": file_meta["index"],
                 "speaker": block["speaker"],
                 "parent_text": f"{block['speaker']}: {block['text']}"
             })
@@ -115,6 +118,7 @@ class HierarchicalTranscriptChunker:
                     "ticker": parent["ticker"],
                     "year": parent["year"],
                     "month": parent["month"],
+                    "index": parent["index"],
                     "speaker": parent["speaker"],
                     "enriched_text": enriched_text
                 })
@@ -148,6 +152,80 @@ class HierarchicalTranscriptChunker:
 
 
 if __name__ == "__main__":
+    # Internal validation test loop to scale chunking across all downloaded files
+    from pdf_parser import FinancialPDFParser
+    
+    parser = FinancialPDFParser()
+    chunker = HierarchicalTranscriptChunker()
+    vector_db = LocalVectorStorage()
+    
+    # Track the base path containing all our company directories
+    transcript_root = Path("financial_data")
+    
+    # Find all files matching the pattern * _Concall_*.pdf recursively across all stock folders
+    all_pdf_paths = list(transcript_root.glob("**/*_Concall_*.pdf"))
+    
+    if not all_pdf_paths:
+        print(f"❌ No valid date-stamped transcript PDFs found inside the '{transcript_root}' directory tree.")
+    else:
+        print(f"📚 Found {len(all_pdf_paths)} corporate transcripts across directories. Starting batch hierarchical chunking processing...")
+        
+        global_parents = []
+        global_children = []
+        
+        for idx, pdf_path in enumerate(all_pdf_paths):
+            print(f"\n────────────────────────────────────────────────────────────")
+            print(f"🔄 Processing File [{idx+1}/{len(all_pdf_paths)}]: {pdf_path.name}")
+            print(f"────────────────────────────────────────────────────────────")
+            
+            try:
+                # Extract layout-aware plain text page arrays chronologically
+                pages = parser.extract_clean_text(str(pdf_path))
+                if not pages:
+                    print(f"⚠️ Warning: Page extraction empty or failed for {pdf_path.name}. Skipping file.")
+                    continue
+                
+                # Segment into independent Parent chunks by tracking speaker turn signals
+                file_parents = chunker.build_parent_chunks(pages)
+                
+                # Construct sub-segment Child chunks with overlapping text window matrices
+                file_children = chunker.build_child_chunks(file_parents)
+                
+                # Aggregate findings into our master batch execution tracking arrays
+                global_parents.extend(file_parents)
+                global_children.extend(file_children)
+                
+            except Exception as file_err:
+                print(f"❌ Failed to process data structure layers for {pdf_path.name}: {str(file_err)}")
+        
+        print(f"\n📊 Batch Processing Complete!")
+        print(f"├── Total Unique Parent Context Blocks Synthesized: {len(global_parents)}")
+        print(f"└── Total Enriched Child Tokens Generated: {len(global_children)}")
+        
+        # Save or incrementally update our local lookup map on your hard drive
+        if global_parents:
+            chunker.save_parent_lookup(global_parents, storage_path="parent_lookup.json")
+            print(f"💾 Centralized relational lookup map updated cleanly at 'parent_lookup.json'")
+            vector_db.index_child_chunks(global_children)
+            print(f'🚀 Vector database hydrated with {len(global_children)} child segments for semantic search.')
+            '''
+            try:
+            except AttributeError:
+                # Fallback if save_parent_lookup is standalone inside main or chunker spaces
+                lookup_path = "parent_lookup.json"
+                lookup_dict = {p["parent_id"]: p["parent_text"] for p in global_parents}
+                if os.path.exists(lookup_path):
+                    try:
+                        with open(lookup_path, "r") as f:
+                            lookup_dict.update(json.load(f))
+                    except Exception: pass
+                with open(lookup_path, "w") as f:
+                    json.dump(lookup_dict, f, indent=4)
+            '''
+
+
+'''
+if __name__ == "__main__":
     from pdf_parser import FinancialPDFParser
     
     parser = FinancialPDFParser()
@@ -176,3 +254,4 @@ if __name__ == "__main__":
             print(f"Relational Parent ID Link: {children[children_index]['parent_id']}")
             print(f"Enriched Text Content:\n{children[children_index]['enriched_text']}")
             print("----------------------------------------")
+'''

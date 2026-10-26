@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from data_scripts.downloader import ConcallDownloader
 from core_rag.pdf_parser import FinancialPDFParser
 from core_rag.chunker import HierarchicalTranscriptChunker
 from core_rag.vector_store import LocalVectorStorage
@@ -12,7 +11,6 @@ def run_end_to_end_pipeline(target_tickers: list[str]):
     print("🎬 STARTING INDIAN FINANCIAL RAG INGESTION PIPELINE 🎬\n")
     
     # 1. Initialize all functional subsystems
-    downloader = ConcallDownloader()
     parser = FinancialPDFParser()
     chunker = HierarchicalTranscriptChunker()
     db = LocalVectorStorage()
@@ -20,7 +18,7 @@ def run_end_to_end_pipeline(target_tickers: list[str]):
     # Track paths of files ready to process
     downloaded_files = []
     
-    # --- PHASE 1: BULK DOWNLOAD ---
+    # --- PHASE 1: LIST PDFs ---
     print("\n--- PHASE 1: FETCHING TRANSCRIPT DATA FROM THE WEB ---")
     for ticker in target_tickers:
         # Locate the newly downloaded file inside the company folder

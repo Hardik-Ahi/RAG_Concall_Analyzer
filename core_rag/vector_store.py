@@ -50,6 +50,7 @@ class LocalVectorStorage:
                 "ticker": child["ticker"],
                 "year": str(child["year"]),
                 "month": str(child["month"]),
+                "index": str(child["index"]),
                 "speaker": child["speaker"]
             })
 
