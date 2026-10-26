@@ -2,16 +2,16 @@ import os
 import json
 from pathlib import Path
 
-# Explicit imports from your newly cleaned library modules
-from bulk_downloader.transcript_downloader import IndiaTranscriptDownloader
-from core_rag.pdf_parser import PlainTextFinancialParser
+# Explicit imports from your library modules
+from data_scripts.downloader import ConcallDownloader
+from core_rag.pdf_parser import FinancialPDFParser
 from core_rag.chunker import HierarchicalTranscriptChunker
 from core_rag.vector_store import LocalVectorStorage
-from core_rag.agent_engine import FreeFinancialAgentSwarm
+from core_rag.agents import FinancialAgentSwarm
 
 # Global system configuration constants
 LOOKUP_PATH = "parent_lookup.json"
-COLLECTION_NAME = "indian_financial_transcripts"
+COLLECTION_NAME = "concall_vectors"
 
 # =====================================================================
 # FUNCTIONAL PIPELINE SUBSYSTEMS (Isolated Capabilities)
@@ -25,7 +25,7 @@ def run_bulk_ingestion(portfolio: list[str]):
     print("\n==============================================================")
     print("📡 PHASE 1: WEB DISCOVERY & BULK DOWNLOADING")
     print("==============================================================")
-    downloader = IndiaTranscriptDownloader()
+    downloader = ConcallDownloader()
     
     for ticker in portfolio:
         downloader.fetch_all_transcripts(ticker)
@@ -41,11 +41,11 @@ def run_parsing_and_hierarchical_chunking(portfolio: list[str]) -> tuple[list[di
     print("\n==============================================================")
     print("📖 PHASE 2 & 3: TEXT PARSING & HIERARCHICAL SEGMENTATION")
     print("==============================================================")
-    parser = PlainTextFinancialParser()
+    parser = FinancialPDFParser()
     chunker = HierarchicalTranscriptChunker()
     
     # Track paths of files matching our timestamp criteria recursively across tickers
-    transcript_root = Path("raw_transcripts")
+    transcript_root = Path("financial_data")
     all_pdf_paths = []
     
     for ticker in portfolio:
@@ -136,7 +136,7 @@ def execute_multi_agent_analysis(portfolio: list[str], analysis_query: str):
     print("⚖️ PHASE 5: RUNNING DUAL-AGENT INTELLIGENCE ANALYSIS")
     print("==============================================================")
     # Instantiate the agent controller pointing to our freshly updated lookup map
-    swarm = FreeFinancialAgentSwarm(lookup_path=LOOKUP_PATH)
+    swarm = FinancialAgentSwarm(lookup_path=LOOKUP_PATH)
     
     # Executes the token streaming output right into your terminal window console
     swarm.analyze_market_landscape(analysis_query, portfolio)
