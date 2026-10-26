@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 import json
 import os
-from vector_store import LocalVectorStorage
+from core_rag.vector_store import LocalVectorStorage
 
 class HierarchicalTranscriptChunker:
     def __init__(self):

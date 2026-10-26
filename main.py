@@ -79,8 +79,25 @@ def run_end_to_end_pipeline(target_tickers: list[str]):
         print(f"\nMatch #{idx+1} [Speaker: {meta['speaker']} | Year: {meta['year']}]:")
         print(f"{doc}")
         print("-" * 40)
+    
+def query_database(query_text: str, ticker: str = None, year: str = None, top_k: int = 3) -> dict:
+    """
+    Queries the database using semantic search while applying optional hard metadata filters.
+    """
+    db = LocalVectorStorage()
+    
+    # Run a test vector lookup targeting one specific company from our index list
+    test_ticker = 'INFY'
+    search_results = db.query_database(query_text=query_text, ticker=test_ticker, top_k=5)
+    
+    print(f"\n🎯 Top semantic matches found inside '{test_ticker}' index zone:")
+    for idx, doc in enumerate(search_results["documents"][0]):
+        meta = search_results["metadatas"][0][idx]
+        print(f"\nMatch #{idx+1} [Speaker: {meta['speaker']} | Year: {meta['year']}]:")
+        print(f"{doc}")
+        print("-" * 40)
 
 if __name__ == "__main__":
     # Define the Indian equities you want to index for analysis
     portfolio = ["INFY"]
-    run_end_to_end_pipeline(portfolio)
+    query_database("How did the company's AI strategy evolve?")
