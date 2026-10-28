@@ -10,7 +10,7 @@ from core_rag.vector_store import LocalVectorStorage
 from core_rag.agents import FinancialAgentSwarm
 
 # Global system configuration constants
-LOOKUP_PATH = "parent_lookup.json"
+PARENT_LOOKUP_PATH = "parent_lookup.json"
 COLLECTION_NAME = "concall_vectors"
 
 # =====================================================================
@@ -80,16 +80,17 @@ def run_parsing_and_hierarchical_chunking(portfolio: list[str]) -> tuple[list[di
     # --- ATOMIC METADATA LOOKUP LAYER SYNC ---
     # Construct/update our central JSON lookup map so Agent 2 can resolve parent IDs instantly
     lookup_dict = {p["parent_id"]: p["parent_text"] for p in compiled_parents}
-    
-    if os.path.exists(LOOKUP_PATH):
+    '''
+    if os.path.exists(PARENT_LOOKUP_PATH):
         try:
-            with open(LOOKUP_PATH, "r") as f:
+            with open(PARENT_LOOKUP_PATH, "r") as f:
                 existing_data = json.load(f)
                 lookup_dict.update(existing_data)
         except Exception:
             pass
+    '''
 
-    with open(LOOKUP_PATH, "w") as f:
+    with open(PARENT_LOOKUP_PATH, "w") as f:
         json.dump(lookup_dict, f, indent=4)
         
     print(f"💾 Relational map synchronized. {len(lookup_dict)} unique parent IDs committed to disk.")
@@ -136,7 +137,7 @@ def execute_multi_agent_analysis(portfolio: list[str], analysis_query: str):
     print("⚖️ PHASE 5: RUNNING DUAL-AGENT INTELLIGENCE ANALYSIS")
     print("==============================================================")
     # Instantiate the agent controller pointing to our freshly updated lookup map
-    swarm = FinancialAgentSwarm(lookup_path=LOOKUP_PATH)
+    swarm = FinancialAgentSwarm(lookup_path=PARENT_LOOKUP_PATH)
     
     # Executes the token streaming output right into your terminal window console
     swarm.analyze_market_landscape(analysis_query, portfolio)
@@ -148,14 +149,11 @@ def execute_multi_agent_analysis(portfolio: list[str], analysis_query: str):
 
 if __name__ == "__main__":
     # 1. Define the asset collection scope we want to target
-    target_portfolio = ["TCS", "INFY"]
+    target_portfolio = ["INFY"]
     
-    # 2. Define the strategic question we want our multi-agent layer to evaluate
-    user_prompt = "Compare the strategic positioning, margin trends, and AI automation investments mentioned by management."
-
     # 🚀 --- STEP 1: WEB TRANSCRIPT HARVESTING ---
     # Comment this out if you've already downloaded the files and want to save network bandwidth
-    run_bulk_ingestion(target_portfolio)
+    #run_bulk_ingestion(target_portfolio)
 
     # 🚀 --- STEP 2: EXTRACT TEXT & GENERATE PARENT-CHILD CHUNKS ---
     # Comment out if you have already parsed the files and generated the data structures
@@ -167,4 +165,6 @@ if __name__ == "__main__":
 
     # 🚀 --- STEP 4: TRIGGER LOCAL OLLAMA TWIN-AGENT REASONING SWARM ---
     # Keep this active to run queries against your financial intelligence index!
+    # Define the strategic question we want our multi-agent layer to evaluate
+    user_prompt = "Walk through the strategic positioning, margin trends, and AI automation investments mentioned by management."
     execute_multi_agent_analysis(target_portfolio, user_prompt)
