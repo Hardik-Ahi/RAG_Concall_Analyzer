@@ -1,7 +1,7 @@
 import os
 import json
 import ollama
-from vector_store import LocalVectorStorage
+from core_rag.vector_store import LocalVectorStorage
 
 class FinancialAgentSwarm:
     def __init__(self, lookup_path: str = "parent_lookup.json"):
@@ -128,7 +128,3 @@ class FinancialAgentSwarm:
 
         final_briefing = self._agent_financial_critic(analyst_outputs)
         return final_briefing
-
-if __name__ == "__main__":
-    swarm = FinancialAgentSwarm()
-    report = swarm.analyze_market_landscape("What is management's outlook on margins and AI?", ["INFY"])

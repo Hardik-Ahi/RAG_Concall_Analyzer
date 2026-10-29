@@ -78,31 +78,3 @@ class LocalVectorStorage:
             where=where_filter if where_filter else None
         )
         return results
-
-if __name__ == "__main__":
-    # Test execution mock loop to prove it functions
-    db = LocalVectorStorage()
-    
-    # Let's create a fake child chunk to test the storage pipeline mechanics
-    mock_children = [{
-        "child_id": "mock-abc-123",
-        "parent_id": "parent-xyz-789",
-        "ticker": "INFOSYS",
-        "year": "2025",
-        "month": "07",
-        "speaker": "Nandan Nilekani",
-        "enriched_text": "Context: INFOSYS Concall (2025-07) | Speaker: Nandan Nilekani\n---\nWe are accelerating our investments in 5G infrastructure and expect to onboard 50 million new subscribers by year-end."
-    }]
-    
-    db.index_child_chunks(mock_children)
-    
-    # Try querying it with a metadata filter
-    print("\n🔍 Running Free Semantic Vector Search Test...")
-    search_results = db.query_database(
-        query_text="How many subscribers do you expect for 5G?", 
-        ticker="INFOSYS",
-        top_k=1
-    )
-    
-    print("--- SEARCH MATCH FOUND ---")
-    print(search_results["documents"][0][0])

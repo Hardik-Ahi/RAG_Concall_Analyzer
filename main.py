@@ -1,103 +1,170 @@
 import os
+import json
 from pathlib import Path
-from dotenv import load_dotenv
+
+# Explicit imports from your library modules
+from data_scripts.downloader import ConcallDownloader
 from core_rag.pdf_parser import FinancialPDFParser
 from core_rag.chunker import HierarchicalTranscriptChunker
 from core_rag.vector_store import LocalVectorStorage
+from core_rag.agents import FinancialAgentSwarm
 
-load_dotenv()  # Load environment variables from .env file
+# Global system configuration constants
+PARENT_LOOKUP_PATH = "parent_lookup.json"
+COLLECTION_NAME = "concall_vectors"
 
-def run_end_to_end_pipeline(target_tickers: list[str]):
-    print("🎬 STARTING INDIAN FINANCIAL RAG INGESTION PIPELINE 🎬\n")
+# =====================================================================
+# FUNCTIONAL PIPELINE SUBSYSTEMS (Isolated Capabilities)
+# =====================================================================
+
+def run_bulk_ingestion(portfolio: list[str]):
+    """
+    PHASE 1: Web Scraping & Asset Acquisition
+    Programmatically extracts all listed transcripts from Screener.in for the target companies.
+    """
+    print("\n==============================================================")
+    print("📡 PHASE 1: WEB DISCOVERY & BULK DOWNLOADING")
+    print("==============================================================")
+    downloader = ConcallDownloader()
     
-    # 1. Initialize all functional subsystems
+    for ticker in portfolio:
+        downloader.fetch_all_transcripts(ticker)
+        
+    print("✅ Ingestion check complete.")
+
+
+def run_parsing_and_hierarchical_chunking(portfolio: list[str]) -> tuple[list[dict], list[dict]]:
+    """
+    PHASE 2 & 3: ETL, Text Layout Parsing, and Speaker-Turn Chunking
+    Gathers local PDFs, resolves speaker boundaries, and generates parent-child structures.
+    """
+    print("\n==============================================================")
+    print("📖 PHASE 2 & 3: TEXT PARSING & HIERARCHICAL SEGMENTATION")
+    print("==============================================================")
     parser = FinancialPDFParser()
     chunker = HierarchicalTranscriptChunker()
-    db = LocalVectorStorage()
     
-    # Track paths of files ready to process
-    downloaded_files = []
+    # Track paths of files matching our timestamp criteria recursively across tickers
+    transcript_root = Path("financial_data")
+    all_pdf_paths = []
     
-    # --- PHASE 1: LIST PDFs ---
-    print("\n--- PHASE 1: FETCHING TRANSCRIPT DATA FROM THE WEB ---")
-    for ticker in target_tickers:
-        # Locate the newly downloaded file inside the company folder
-        company_dir = Path("financial_data") / ticker
-        # Grab the actual PDF file path (ignoring any temporary placeholders)
-        pdf_paths = list(company_dir.glob("*_Concall_*.pdf"))
-        if pdf_paths:
-            downloaded_files.append(pdf_paths[0]) # Snag the latest one
-                
-    if not downloaded_files:
-        print("❌ No files were successfully downloaded. Pipeline aborted.")
-        return
+    for ticker in portfolio:
+        company_dir = transcript_root / ticker
+        if company_dir.exists():
+            pdf_paths = list(company_dir.glob("*_Concall_*.pdf"))
+            all_pdf_paths.extend(pdf_paths)
 
-    # --- PHASE 2 & 3: PARSING & HIERARCHICAL CHUNKING ---
-    print("\n--- PHASE 2 & 3: STRUCTURAL LAYOUT PROCESSING & CHUNKING ---")
-    all_compiled_parents = []
-    all_compiled_children = []
+    if not all_pdf_paths:
+        print("⚠️ Warning: No date-stamped transcript PDFs found to parse on disk.")
+        return [], []
+
+    print(f"📚 Detected {len(all_pdf_paths)} document targets. Beginning structural parsing...")
     
-    for pdf_path in downloaded_files:
-        # Step A: Parse pages to text chunks
-        parsed_pages = parser.extract_clean_text(str(pdf_path))
-        if not parsed_pages:
+    compiled_parents = []
+    compiled_children = []
+
+    for pdf_path in all_pdf_paths:
+        # Extract chronological lines page-by-page
+        pages = parser.extract_clean_text(str(pdf_path))
+        if not pages:
             continue
-            
-        # Step B: Segment into Parent blocks by speaker
-        parent_chunks = chunker.build_parent_chunks(parsed_pages)
         
-        # Step C: Generate overlapping Child segments with Context Enrichment Headers
-        child_chunks = chunker.build_child_chunks(parent_chunks)
+        # Build Parent blocks (UUIDs mapped to speaker dialogue turns)
+        file_parents = chunker.build_parent_chunks(pages)
+        # Build Child blocks (Sliding window token structures with context enrichment headers)
+        file_children = chunker.build_child_chunks(file_parents)
         
-        all_compiled_parents.extend(parent_chunks)
-        all_compiled_children.extend(child_chunks)
+        compiled_parents.extend(file_parents)
+        compiled_children.extend(file_children)
 
-    # Save the parent lookup dictionary
-    chunker.save_parent_lookup(all_compiled_parents, storage_path="parent_lookup.json")
+    # --- ATOMIC METADATA LOOKUP LAYER SYNC ---
+    # Construct/update our central JSON lookup map so Agent 2 can resolve parent IDs instantly
+    lookup_dict = {p["parent_id"]: p["parent_text"] for p in compiled_parents}
+    '''
+    if os.path.exists(PARENT_LOOKUP_PATH):
+        try:
+            with open(PARENT_LOOKUP_PATH, "r") as f:
+                existing_data = json.load(f)
+                lookup_dict.update(existing_data)
+        except Exception:
+            pass
+    '''
 
-    # --- PHASE 4: LOCAL VECTOR STORE SYNC ---
-    print("\n--- PHASE 4: EMBEDDING GENERATION & DATABASE SYNC ---")
-    if all_compiled_children:
-        db.index_child_chunks(all_compiled_children)
-        print(f"\n🚀 SUCCESS! Database hydrated with {len(all_compiled_children)} vectors across {len(target_tickers)} companies.")
-    else:
-        print("❌ Data assembly yielded 0 valid child chunks for processing.")
+    with open(PARENT_LOOKUP_PATH, "w") as f:
+        json.dump(lookup_dict, f, indent=4)
+        
+    print(f"💾 Relational map synchronized. {len(lookup_dict)} unique parent IDs committed to disk.")
+    return compiled_parents, compiled_children
+
+
+def run_vector_store_hydration(child_chunks: list[dict]):
+    """
+    PHASE 4: Local Vectorization & Database Storage
+    Wipes the active Chroma collection and rebuilds it using local BGE embeddings.
+    """
+    print("\n==============================================================")
+    print("🧠 PHASE 4: LOCAL VECTOR STORE GENERATION & HYDRATION")
+    print("==============================================================")
+    if not child_chunks:
+        print("❌ Sync aborted: 0 child chunks passed for vector database injection.")
         return
 
-    # --- PHASE 5: VERIFICATION QUERY ---
-    print("\n--- PHASE 5: RUNNING LIVE SEMANTIC SEARCH VERIFICATION ---")
-    sample_query = "What did management say about AI strategy, margins, or automation?"
-    print(f"User Query: '{sample_query}'")
-    
-    # Run a test vector lookup targeting one specific company from our index list
-    test_ticker = target_tickers[0]
-    search_results = db.query_database(query_text=sample_query, ticker=test_ticker, top_k=2)
-    
-    print(f"\n🎯 Top semantic matches found inside '{test_ticker}' index zone:")
-    for idx, doc in enumerate(search_results["documents"][0]):
-        meta = search_results["metadatas"][0][idx]
-        print(f"\nMatch #{idx+1} [Speaker: {meta['speaker']} | Year: {meta['year']}]:")
-        print(f"{doc}")
-        print("-" * 40)
-    
-def query_database(query_text: str, ticker: str = None, year: str = None, top_k: int = 3) -> dict:
-    """
-    Queries the database using semantic search while applying optional hard metadata filters.
-    """
     db = LocalVectorStorage()
     
-    # Run a test vector lookup targeting one specific company from our index list
-    test_ticker = 'INFY'
-    search_results = db.query_database(query_text=query_text, ticker=test_ticker, top_k=5)
+    # Purge old collection to prevent vector fragmentation across script restarts
+    try:
+        print(f"🧹 Clearing historical records from collection: '{COLLECTION_NAME}'...")
+        db.client.delete_collection(COLLECTION_NAME)
+        db.collection = db.client.create_collection(
+            name=COLLECTION_NAME,
+            embedding_function=db.embedding_fn,
+            metadata={"hnsw:space": "cosine"}
+        )
+    except Exception:
+        pass
+
+    # Batch execute embedding computations and save directly to disk database folder
+    db.index_child_chunks(child_chunks)
+    print("✅ Collection successfully populated.")
+
+
+def execute_multi_agent_analysis(portfolio: list[str], analysis_query: str):
+    """
+    PHASE 5: Collaborative Agent Routing Layer
+    Deploys the local Llama model via Ollama to evaluate findings across target companies.
+    """
+    print("\n==============================================================")
+    print("⚖️ PHASE 5: RUNNING DUAL-AGENT INTELLIGENCE ANALYSIS")
+    print("==============================================================")
+    # Instantiate the agent controller pointing to our freshly updated lookup map
+    swarm = FinancialAgentSwarm(lookup_path=PARENT_LOOKUP_PATH)
     
-    print(f"\n🎯 Top semantic matches found inside '{test_ticker}' index zone:")
-    for idx, doc in enumerate(search_results["documents"][0]):
-        meta = search_results["metadatas"][0][idx]
-        print(f"\nMatch #{idx+1} [Speaker: {meta['speaker']} | Year: {meta['year']}]:")
-        print(f"{doc}")
-        print("-" * 40)
+    # Executes the token streaming output right into your terminal window console
+    swarm.analyze_market_landscape(analysis_query, portfolio)
+
+
+# =====================================================================
+# SYSTEM MAIN CONTROL INTERFACE (Execution Orchestrator)
+# =====================================================================
 
 if __name__ == "__main__":
-    # Define the Indian equities you want to index for analysis
-    portfolio = ["INFY"]
-    query_database("How did the company's AI strategy evolve?")
+    # 1. Define the asset collection scope we want to target
+    target_portfolio = ["INFY"]
+    
+    # 🚀 --- STEP 1: WEB TRANSCRIPT HARVESTING ---
+    # Comment this out if you've already downloaded the files and want to save network bandwidth
+    #run_bulk_ingestion(target_portfolio)
+
+    # 🚀 --- STEP 2: EXTRACT TEXT & GENERATE PARENT-CHILD CHUNKS ---
+    # Comment out if you have already parsed the files and generated the data structures
+    parents, children = run_parsing_and_hierarchical_chunking(target_portfolio)
+
+    # 🚀 --- STEP 3: RE-COMPUTE EMBEDDINGS & WATER THE DATABASE ---
+    # Comment out if your Chroma DB folder index is already completely up to date
+    run_vector_store_hydration(children)
+
+    # 🚀 --- STEP 4: TRIGGER LOCAL OLLAMA TWIN-AGENT REASONING SWARM ---
+    # Keep this active to run queries against your financial intelligence index!
+    # Define the strategic question we want our multi-agent layer to evaluate
+    user_prompt = "Walk through the strategic positioning, margin trends, and AI automation investments mentioned by management."
+    execute_multi_agent_analysis(target_portfolio, user_prompt)

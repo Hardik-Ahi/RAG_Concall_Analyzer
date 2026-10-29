@@ -132,10 +132,3 @@ class ConcallDownloader:
         except Exception as e:
             print(f"❌ Extraction infrastructure pipeline error: {str(e)}")
         return False
-
-
-if __name__ == "__main__":
-    downloader = ConcallDownloader()
-    target_stocks = ["INFY"]
-    for stock in target_stocks:
-        downloader.fetch_all_transcripts(stock)
