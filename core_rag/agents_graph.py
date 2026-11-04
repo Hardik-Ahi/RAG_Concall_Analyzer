@@ -121,12 +121,8 @@ class LangGraphFinancialSwarm:
             raw_evidence += f"=== EVIDENCE BASE FOR {ticker} ===\n{data}\n\n"
 
         prompt = (
-            "You are an expert investment analyst. Take this raw data and compile a sophisticated briefing ONLY based on the raw data.\n\n"
-            "Your output MUST follow this strict structured layout:\n"
-            "## Executive Synthesis\n"
-            "## Cross-Company Comparative Moat Evaluation (if applicable on raw data)\n"
-            "## Key Financial & Forward-Looking Risks\n\n"
-            f"Evidence Context:\n{raw_evidence}"
+            f"You are an expert financial analyst. Take this raw data and compile a sophisticated briefing: {raw_evidence}\n\n"
+            f"Focus on answering the user's query: {state['user_query']}\n\n"
         )
         
         # For LangGraph prototypes running locally, we can capture the complete text output block cleanly
