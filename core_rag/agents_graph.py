@@ -53,7 +53,7 @@ class LangGraphFinancialSwarm:
         prompt = (
             f"PRESENT DATE: Year-{current_year}, Month-{current_month:02d}. Extract date filters from this query: '{state['user_query']}'\n"
             "Return ONLY a raw valid JSON payload with this exact structure (no markdown wrappers):\n"
-            "{\"ticker\": \"TCS or INFY or null\", \"relative_count\": 4, \"explicit_years\": null}"
+            "{\"ticker\": \"INFY\", \"relative_count\": 4, \"explicit_years\": null}"
         )
         
         # Invoke the local model
@@ -121,10 +121,10 @@ class LangGraphFinancialSwarm:
             raw_evidence += f"=== EVIDENCE BASE FOR {ticker} ===\n{data}\n\n"
 
         prompt = (
-            "You are an expert investment analyst. Take this raw data and compile a sophisticated briefing.\n\n"
+            "You are an expert investment analyst. Take this raw data and compile a sophisticated briefing ONLY based on the raw data.\n\n"
             "Your output MUST follow this strict structured layout:\n"
             "## Executive Synthesis\n"
-            "## Cross-Company Comparative Moat Evaluation (if applicable)\n"
+            "## Cross-Company Comparative Moat Evaluation (if applicable on raw data)\n"
             "## Key Financial & Forward-Looking Risks\n\n"
             f"Evidence Context:\n{raw_evidence}"
         )
@@ -153,7 +153,7 @@ class LangGraphFinancialSwarm:
         
         return builder.compile()
 
-    def analyze_market_landscape(self, analysis_query: str, default_portfolio: List[str] = ['INFY']) -> str:
+    def analyze_market_landscape(self, analysis_query: str, default_portfolio: List[str]) -> str:
         """Invokes the LangGraph state machine workflow runtime engine."""
         # Initialize the global state dictionary payload input configurations
         initial_state: AgentState = {

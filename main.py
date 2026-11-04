@@ -7,7 +7,7 @@ from data_scripts.downloader import ConcallDownloader
 from core_rag.pdf_parser import FinancialPDFParser
 from core_rag.chunker import HierarchicalTranscriptChunker
 from core_rag.vector_store import LocalVectorStorage
-from core_rag.agents import FinancialAgentSwarm
+from core_rag.agents_graph import LangGraphFinancialSwarm
 
 # Global system configuration constants
 PARENT_LOOKUP_PATH = "parent_lookup.json"
@@ -142,6 +142,19 @@ def execute_multi_agent_analysis(portfolio: list[str], analysis_query: str):
     # Executes the token streaming output right into your terminal window console
     swarm.analyze_market_landscape(analysis_query, portfolio)
 
+def execute_multi_agent_analysis(portfolio: list[str], analysis_query: str):
+    print("\n==============================================================")
+    print("⚖️ PHASE 5: RUNNING UPGRADED LANGGRAPH STATE MACHINE SWARM")
+    print("==============================================================")
+    
+    swarm = LangGraphFinancialSwarm(lookup_path=PARENT_LOOKUP_PATH)
+    report = swarm.analyze_market_landscape(analysis_query, portfolio)
+    
+    print("\n================== LANGGRAPH EXECUTIVE BRIEFING ==================")
+    print(report)
+    print("==================================================================")
+
+
 
 # =====================================================================
 # SYSTEM MAIN CONTROL INTERFACE (Execution Orchestrator)
@@ -157,14 +170,14 @@ if __name__ == "__main__":
 
     # 🚀 --- STEP 2: EXTRACT TEXT & GENERATE PARENT-CHILD CHUNKS ---
     # Comment out if you have already parsed the files and generated the data structures
-    parents, children = run_parsing_and_hierarchical_chunking(target_portfolio)
+    #parents, children = run_parsing_and_hierarchical_chunking(target_portfolio)
 
     # 🚀 --- STEP 3: RE-COMPUTE EMBEDDINGS & WATER THE DATABASE ---
     # Comment out if your Chroma DB folder index is already completely up to date
-    run_vector_store_hydration(children)
+    #run_vector_store_hydration(children)
 
     # 🚀 --- STEP 4: TRIGGER LOCAL OLLAMA TWIN-AGENT REASONING SWARM ---
     # Keep this active to run queries against your financial intelligence index!
     # Define the strategic question we want our multi-agent layer to evaluate
-    user_prompt = "Walk through the strategic positioning, margin trends, and AI automation investments mentioned by management."
+    user_prompt = "Analyze the impact of AI on the company's performance through all available years."
     execute_multi_agent_analysis(target_portfolio, user_prompt)
