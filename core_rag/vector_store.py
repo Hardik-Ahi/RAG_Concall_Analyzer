@@ -78,3 +78,79 @@ class LocalVectorStorage:
             where=where_filter if where_filter else None
         )
         return results
+
+    def get_company_timeline(self, ticker: str) -> list[dict[str, str]]:
+        """
+        Returns the company's available transcript months, newest first.
+        """
+        results = self.collection.get(
+            where={"ticker": ticker},
+            include=["metadatas"]
+        )
+
+        months = set()
+        for metadata in results.get("metadatas") or []:
+            if not metadata:
+                continue
+
+            year = str(metadata.get("year", ""))
+            month = str(metadata.get("month", ""))
+            if len(year) == 4 and year.isdigit() and month.isdigit():
+                month_number = int(month)
+                if 1 <= month_number <= 12:
+                    months.add((int(year), month_number))
+
+        return [
+            {"key": f"{year:04d}_{month:02d}"}
+            for year, month in sorted(months, reverse=True)
+        ]
+
+    def query_database_advanced(
+        self,
+        query_text: str,
+        ticker: str,
+        target_keys: list[str],
+        top_k: int
+    ) -> dict:
+        """
+        Performs semantic search for a ticker, optionally limited to YYYY_MM keys.
+
+        Results are flattened from Chroma's single-query batch shape for callers
+        that consume each matched metadata record directly.
+        """
+        where_filter = {"ticker": ticker}
+        if target_keys:
+            year_months = []
+            for key in dict.fromkeys(target_keys):
+                parts = key.split("_")
+                if (
+                    len(parts) != 2
+                    or len(parts[0]) != 4
+                    or not parts[0].isdigit()
+                    or not parts[1].isdigit()
+                    or not 1 <= int(parts[1]) <= 12
+                ):
+                    raise ValueError(f"Invalid timeline key {key!r}; expected YYYY_MM.")
+                year_months.append((parts[0], f"{int(parts[1]):02d}"))
+
+            month_filters = [
+                {"$and": [{"year": year}, {"month": month}]}
+                for year, month in year_months
+            ]
+            selected_months = (
+                month_filters[0]
+                if len(month_filters) == 1
+                else {"$or": month_filters}
+            )
+            where_filter = {"$and": [{"ticker": ticker}, selected_months]}
+
+        results = self.collection.query(
+            query_texts=[query_text],
+            n_results=top_k,
+            where=where_filter
+        )
+        for field in ("ids", "documents", "metadatas", "distances", "embeddings"):
+            values = results.get(field)
+            if values is not None and len(values) == 1:
+                results[field] = values[0]
+        return results
