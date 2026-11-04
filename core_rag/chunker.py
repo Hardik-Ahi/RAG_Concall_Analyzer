@@ -41,8 +41,10 @@ class HierarchicalTranscriptChunker:
         current_block_text = []
 
         # Step 1: Chronologically combine text flows across pages
+        page_number = -1  # Initialize page number here for trailing block also
         for page in parsed_pages:
             lines = page["content"].split("\n")
+            page_number = page.get("page_number", -1)
             for line in lines:
                 line_str = line.strip()
                 if not line_str:
@@ -55,7 +57,8 @@ class HierarchicalTranscriptChunker:
                     if current_block_text:
                         raw_speech_blocks.append({
                             "speaker": current_speaker,
-                            "text": " ".join(current_block_text)
+                            "text": " ".join(current_block_text),
+                            "page_number": page_number
                         })
                     
                     current_speaker = speaker_match.group(0).strip()
@@ -66,10 +69,12 @@ class HierarchicalTranscriptChunker:
                     current_block_text.append(line_str)
 
         # Append the final trailing block
+
         if current_block_text:
             raw_speech_blocks.append({
                 "speaker": current_speaker,
-                "text": " ".join(current_block_text)
+                "text": " ".join(current_block_text),
+                "page_number": page_number
             })
 
         # Step 2: Structure speech blocks into complete unique Parent Chunks
@@ -81,6 +86,7 @@ class HierarchicalTranscriptChunker:
             parent_id = str(uuid.uuid4())
             parent_chunks.append({
                 "parent_id": parent_id,
+                "page_number": block["page_number"],
                 "ticker": file_meta["ticker"],
                 "year": file_meta["year"],
                 "month": file_meta["month"],
@@ -119,6 +125,7 @@ class HierarchicalTranscriptChunker:
                     "year": parent["year"],
                     "month": parent["month"],
                     "index": parent["index"],
+                    "page_number": parent["page_number"],
                     "speaker": parent["speaker"],
                     "enriched_text": enriched_text
                 })

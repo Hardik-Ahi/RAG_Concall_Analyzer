@@ -51,7 +51,8 @@ class LocalVectorStorage:
                 "year": str(child["year"]),
                 "month": str(child["month"]),
                 "index": str(child["index"]),
-                "speaker": child["speaker"]
+                "speaker": child["speaker"],
+                "page_number": str(child["page_number"])
             })
 
         # Batch upload vectors to the local database cluster
