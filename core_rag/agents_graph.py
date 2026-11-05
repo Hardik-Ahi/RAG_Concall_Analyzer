@@ -105,7 +105,7 @@ class LangGraphFinancialSwarm:
                     continue
 
                 citation_metadata = {}
-                for field in ("year", "month", "index", "page_number"):
+                for field in ("year", "month", "index", "page_number", "speaker"):
                     value = meta.get(field)
                     if value is None or not str(value).strip():
                         raise ValueError(
@@ -114,7 +114,7 @@ class LangGraphFinancialSwarm:
                     citation_metadata[field] = str(value).strip()
 
                 source_key = (ticker, *(citation_metadata[field] for field in (
-                    "year", "month", "index", "page_number"
+                    "year", "month", "index", "page_number", "speaker"
                 )))
                 source_id = source_ids_by_metadata.get(source_key)
                 if source_id is None:
@@ -147,8 +147,8 @@ class LangGraphFinancialSwarm:
             
             prompt = (
                 "Extract factual claims based ONLY on the evidence below. Return Markdown bullet points. "
-                "End every bullet with one or more exact source ID markers shown with that evidence "
-                "(for example, [[S1]]). Do not invent, alter, or omit source IDs.\n\n"
+                "End every bullet with one or more exact source ID markers shown with that evidence. "
+                "Do not invent, alter, or omit source IDs.\n\n"
                 f"{compiled_context}\n\n"
                 f"Focus on fulfilling this target: {state['user_query']}"
             )
@@ -175,7 +175,7 @@ class LangGraphFinancialSwarm:
         prompt = (
             "You are an expert financial analyst. Use only the source-backed evidence to answer the "
             "user's query. Produce section headings and Markdown bullet points. Every factual bullet "
-            "must end with one or more exact source ID markers from the evidence (for example, [[S1]]); "
+            "must end with one or more exact source ID markers from the evidence; "
             "preserve those markers unchanged. For combined claims, include every relevant source ID. "
             "Do not make claims that lack a source ID.\n\n"
             f"Evidence:\n{raw_evidence}\n"
