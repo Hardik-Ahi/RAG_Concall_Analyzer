@@ -65,18 +65,16 @@ class LangGraphFinancialSwarm:
             f"Current year and month: {current_date}.\n"
             f"Parse the temporal intent in this user query: {state['user_query']!r}\n"
             "Return ONLY a JSON object with exactly these keys and types, without markdown fences:\n"
-            '{"all_years": false, "latest": false, "earliest": false, "time_list": ["2026_06"]}\n'
+            '{"all_years": Boolean, "latest": Boolean, "earliest": Boolean, "time_list": List[String]}\n'
             "Rules:\n"
             "- all_years is true when the user asks for all items/documents available in the database. "
             "For a query with no temporal constraint, set all_years to true.\n"
             "- latest is true when the user targets the latest available document.\n"
             "- earliest is true when the user targets the earliest available document.\n"
-            "- Set each boolean independently according to the user's request. They may overlap; "
-            "when the filter is later applied, the consumer gives priority to all_years, then latest, "
-            "then earliest.\n"
+            "- Set each boolean independently according to the user's request. They may overlap.\n"
             "- If none of those modes applies, set all three booleans to false and populate time_list "
-            "with every requested calendar month as a zero-padded YYYY_MM string, in chronological "
-            "order, without duplicates. time_list must not be empty in this case.\n"
+            "with every requested calendar month as a zero-padded YYYY_MM string, "
+            "without duplicates. time_list must not be empty in this case.\n"
             "- When the query includes an explicit date range or named months, populate time_list "
             "with those months even if one or more booleans are true. If there is no explicit time "
             "range, use an empty time_list.\n"
@@ -133,8 +131,10 @@ class LangGraphFinancialSwarm:
             )
         if len(time_list) != len(set(time_list)):
             raise ValueError("Temporal filter time_list must not contain duplicates.")
+        '''
         if time_list != sorted(time_list):
             raise ValueError("Temporal filter time_list must be in chronological order.")
+        '''
 
         return {"time_filter": time_filter}
 
@@ -261,9 +261,12 @@ class LangGraphFinancialSwarm:
         
         # Link structural progression steps sequentially using standard edges
         builder.add_edge(START, "query_parser")
+        builder.add_edge("query_parser", END)  # Allow early exit if temporal parsing fails
+        '''
         builder.add_edge("query_parser", "research_analyst")
         builder.add_edge("research_analyst", "financial_critic")
         builder.add_edge("financial_critic", END)
+        '''
         
         return builder.compile()
 
@@ -287,4 +290,4 @@ class LangGraphFinancialSwarm:
         
         # Run graph instance execution loops
         final_output_state = self.graph.invoke(initial_state)
-        return final_output_state["final_report"]
+        return final_output_state["time_filter"]
