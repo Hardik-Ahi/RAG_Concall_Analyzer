@@ -38,6 +38,13 @@ This system leverages a syntactically-aware parent-child document architecture a
 
 ![alt-text](assets/child_chunk_output.jpg)
 
-### 🔮 Next Step
+### Citations in analysis responses
 
-Integrate an LLM with the system to fetch parent chunks into its context window in response to a user query.
+The LangGraph analysis response adds an inline citation to each factual bullet. Citations are resolved
+from the metadata of the retrieved child chunks and use this format:
+
+`(year-month, index <index>, p. <page_number>)`
+
+For example: `- Revenue grew. (2025-07, index 2, p. 12)`. If a generated bullet does not include a
+valid source ID, or a retrieved source is missing required citation metadata, the graph reports an
+error rather than presenting an unsupported citation.

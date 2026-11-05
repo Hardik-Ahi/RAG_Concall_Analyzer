@@ -1,8 +1,11 @@
 .env
 .venv/
 __pycache__/
+
 *.pyc
 .DS_Store
-financial_data/
 *.json
+
+financial_data/
 chroma_db/
+tests/
