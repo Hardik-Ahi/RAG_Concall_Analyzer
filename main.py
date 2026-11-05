@@ -179,5 +179,5 @@ if __name__ == "__main__":
     # 🚀 --- STEP 4: TRIGGER LOCAL OLLAMA TWIN-AGENT REASONING SWARM ---
     # Keep this active to run queries against your financial intelligence index!
     # Define the strategic question we want our multi-agent layer to evaluate
-    user_prompt = "Analyze the impact of AI on the company's performance in the last 6 months."
+    user_prompt = "Analyze the impact of AI on the company's performance in 2026."
     execute_multi_agent_analysis(target_portfolio, user_prompt)

@@ -75,6 +75,7 @@ class LangGraphFinancialSwarm:
             "- earliest is true when the user targets the earliest (oldest) available information or document.\n"
             "- When the query includes user months that are either explicitly mentioned or can be inferred, generate corresponding time_list months "
             "without duplicates. If no user months can be inferred, use an empty time_list.\n"
+            "- A year in the user query means all 12 months of that year. Example: 2020 -> 2020_01, 2020_02, ..., 2020_12.\n"
         )
 
         response = self.llm.invoke(prompt)
