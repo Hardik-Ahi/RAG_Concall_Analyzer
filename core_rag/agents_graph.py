@@ -70,12 +70,14 @@ class LangGraphFinancialSwarm:
             "- Prerequisites: there are 2 kinds of the word 'month', one is specified in the user query "
             "(by name such as January, or by number such as 01, or relatively such as 'last 3 months'). This is referred to as a 'user month'. "
             "The other is the month to be stored in time_list, which is always in the format YYYY_MM. This is referred to as a 'time_list month'.\n"
-            "- all_years is true only when the user does not provide a temporal constraint or explicitly asks for all data with the keyword 'all' beside the time unit.\n"
+            "- all_years is true only when the user does not provide a temporal constraint or explicitly asks for all data with the keyword 'all' beside the time unit. "
+            "If all_years is true, no need to populate time_list.\n"
             "- latest is true when the user targets the latest available information or document.\n"
             "- earliest is true when the user targets the earliest (oldest) available information or document.\n"
             "- When the query includes user months that are either explicitly mentioned or can be inferred, generate corresponding time_list months "
             "without duplicates. If no user months can be inferred, use an empty time_list.\n"
-            "- A year in the user query means all 12 months of that year. Example: 2020 -> 2020_01, 2020_02, ..., 2020_12.\n"
+            "- A year in the user query means all completed months of that year. Example: 2020 -> 2020_01, 2020_02, ..., 2020_12. "
+            "But for current month being 2026_10, omit the future months (2026_11, 2026_12) from the time_list since we anyways don't have data for those.\n"
         )
 
         response = self.llm.invoke(prompt)
