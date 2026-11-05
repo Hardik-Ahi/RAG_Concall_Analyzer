@@ -106,20 +106,83 @@ class LocalVectorStorage:
             for year, month in sorted(months, reverse=True)
         ]
 
+    def get_company_extreme_document(
+        self,
+        ticker: str,
+        latest: bool
+    ) -> dict[str, str] | None:
+        """
+        Returns the latest or earliest available transcript descriptor for a ticker.
+
+        For a transcript month containing multiple indexed calls, the lowest numeric
+        index is selected.
+        """
+        results = self.collection.get(
+            where={"ticker": ticker},
+            include=["metadatas"]
+        )
+
+        documents = []
+        seen_documents = set()
+        for metadata in results.get("metadatas") or []:
+            if not metadata:
+                continue
+
+            year = str(metadata.get("year", ""))
+            month = str(metadata.get("month", ""))
+            index = str(metadata.get("index", ""))
+            if (
+                len(year) != 4
+                or not (year.isascii() and year.isdecimal())
+                or len(month) != 2
+                or not (month.isascii() and month.isdecimal())
+                or not (index.isascii() and index.isdecimal())
+                or int(year) < 1
+                or not 1 <= int(month) <= 12
+            ):
+                continue
+
+            document = (int(year), int(month), int(index), year, f"{int(month):02d}", index)
+            identity = document[:3]
+            if identity not in seen_documents:
+                seen_documents.add(identity)
+                documents.append(document)
+
+        if not documents:
+            return None
+
+        selected_month = (max if latest else min)(
+            (document[0], document[1]) for document in documents
+        )
+        selected_document = min(
+            (
+                document for document in documents
+                if (document[0], document[1]) == selected_month
+            ),
+            key=lambda document: (document[2], document[5])
+        )
+        return {
+            "year": selected_document[3],
+            "month": selected_document[4],
+            "index": selected_document[5]
+        }
+
     def query_database_advanced(
         self,
         query_text: str,
         ticker: str,
         target_keys: list[str],
-        top_k: int
+        top_k: int,
+        target_index: str | None = None
     ) -> dict:
         """
-        Performs semantic search for a ticker, optionally limited to YYYY_MM keys.
+        Performs semantic search for a ticker, optionally limited to YYYY_MM keys
+        and a transcript index.
 
         Results are flattened from Chroma's single-query batch shape for callers
         that consume each matched metadata record directly.
         """
-        where_filter = {"ticker": ticker}
+        filters = [{"ticker": ticker}]
         if target_keys:
             year_months = []
             for key in dict.fromkeys(target_keys):
@@ -143,7 +206,14 @@ class LocalVectorStorage:
                 if len(month_filters) == 1
                 else {"$or": month_filters}
             )
-            where_filter = {"$and": [{"ticker": ticker}, selected_months]}
+            filters.append(selected_months)
+        if target_index is not None:
+            target_index = str(target_index)
+            if not (target_index.isascii() and target_index.isdecimal()):
+                raise ValueError(f"Invalid target index {target_index!r}; expected a numeric index.")
+            filters.append({"index": target_index})
+
+        where_filter = filters[0] if len(filters) == 1 else {"$and": filters}
 
         results = self.collection.query(
             query_texts=[query_text],

@@ -17,6 +17,7 @@ class FakeDatabase:
                     "month": "07",
                     "index": "1",
                     "page_number": "5",
+                    "speaker": "CEO",
                 },
                 {
                     "parent_id": "parent-2",
@@ -24,6 +25,7 @@ class FakeDatabase:
                     "month": "07",
                     "index": "2",
                     "page_number": "8",
+                    "speaker": "CEO",
                 },
             ]
         }
@@ -48,25 +50,32 @@ class RenderCitationsTests(unittest.TestCase):
                 "month": "07",
                 "index": "2",
                 "page_number": "12",
+                "speaker": "CEO",
             }
         }
 
         self.assertEqual(
             render_citations(report, sources),
-            "## Findings\n- Revenue grew. (2025-07, index 2, p. 12)",
+            "## Findings\n- Revenue grew. (2025-07, index 2, p. 12, CEO)",
         )
 
     def test_renders_multiple_distinct_sources_for_a_bullet(self):
         report = "- Growth was broad-based. [[S1]] [[S2]]"
         sources = {
-            "S1": {"year": "2025", "month": "07", "index": "1", "page_number": "5"},
-            "S2": {"year": "2025", "month": "07", "index": "2", "page_number": "8"},
+            "S1": {
+                "year": "2025", "month": "07", "index": "1",
+                "page_number": "5", "speaker": "CEO",
+            },
+            "S2": {
+                "year": "2025", "month": "07", "index": "2",
+                "page_number": "8", "speaker": "CEO",
+            },
         }
 
         self.assertEqual(
             render_citations(report, sources),
-            "- Growth was broad-based. (2025-07, index 1, p. 5) "
-            "(2025-07, index 2, p. 8)",
+            "- Growth was broad-based. (2025-07, index 1, p. 5, CEO) "
+            "(2025-07, index 2, p. 8, CEO)",
         )
 
     def test_rejects_bullets_without_source_ids(self):
@@ -100,6 +109,12 @@ class GraphCitationFlowTests(unittest.TestCase):
         initial_state = {
             "user_query": "What changed?",
             "target_tickers": ["INFY"],
+            "time_filter": {
+                "all_years": False,
+                "latest": False,
+                "earliest": False,
+                "time_list": ["2025_07"],
+            },
             "timeline_keys": {"INFY": ["2025_07"]},
         }
         with redirect_stdout(io.StringIO()):
@@ -110,8 +125,8 @@ class GraphCitationFlowTests(unittest.TestCase):
         self.assertIn("[[S2]]", swarm.llm.prompts[0])
         self.assertEqual(
             final_state["final_report"],
-            "## Findings\n- Final claim. (2025-07, index 1, p. 5) "
-            "(2025-07, index 2, p. 8)",
+            "## Findings\n- Final claim. (2025-07, index 1, p. 5, CEO) "
+            "(2025-07, index 2, p. 8, CEO)",
         )
 
 

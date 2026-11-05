@@ -140,14 +140,45 @@ class LangGraphFinancialSwarm:
         
         for ticker in state["target_tickers"]:
             print(f"Crypting 🕵️‍♂️ [NODE 1: ANALYST] Extracting factual profiles for {ticker}...")
-            target_keys = state["timeline_keys"].get(ticker, [])
-            
-            # Advanced chronological vector database fetch
-            search_results = self.db.query_database_advanced(  # WHAT ?!
-                query_text=state["user_query"], ticker=ticker, target_keys=target_keys, top_k=3
-            )
-            
-            metadatas = search_results.get("metadatas", [])
+            time_filter = state["time_filter"]
+            if time_filter["all_years"]:
+                search_results = self.db.query_database(
+                    query_text=state["user_query"],
+                    ticker=ticker,
+                    top_k=5
+                )
+            elif time_filter["latest"] or time_filter["earliest"]:
+                latest = time_filter["latest"]
+                document = self.db.get_company_extreme_document(
+                    ticker=ticker,
+                    latest=latest
+                )
+                if document is None:
+                    search_results = {"metadatas": []}
+                else:
+                    search_results = self.db.query_database_advanced(
+                        query_text=state["user_query"],
+                        ticker=ticker,
+                        target_keys=[f"{document['year']}_{document['month']}"],
+                        target_index=document["index"],
+                        top_k=3
+                    )
+            else:
+                if not time_filter["time_list"]:
+                    raise ValueError(
+                        f"Temporal filter for ticker {ticker!r} has no selected mode "
+                        "and an empty time_list."
+                    )
+                search_results = self.db.query_database_advanced(
+                    query_text=state["user_query"],
+                    ticker=ticker,
+                    target_keys=time_filter["time_list"],
+                    top_k=5
+                )
+
+            metadatas = search_results.get("metadatas") or []
+            if metadatas and isinstance(metadatas[0], list):
+                metadatas = metadatas[0]
             parent_contexts = {}
             for meta in metadatas:
                 p_id = meta.get("parent_id")
@@ -255,12 +286,9 @@ class LangGraphFinancialSwarm:
         
         # Link structural progression steps sequentially using standard edges
         builder.add_edge(START, "query_parser")
-        builder.add_edge("query_parser", END)  # Allow early exit if temporal parsing fails
-        '''
         builder.add_edge("query_parser", "research_analyst")
         builder.add_edge("research_analyst", "financial_critic")
         builder.add_edge("financial_critic", END)
-        '''
         
         return builder.compile()
 
@@ -284,4 +312,4 @@ class LangGraphFinancialSwarm:
         
         # Run graph instance execution loops
         final_output_state = self.graph.invoke(initial_state)
-        return final_output_state["time_filter"]
+        return final_output_state["final_report"]
