@@ -70,7 +70,7 @@ class LangGraphFinancialSwarm:
             "- Prerequisites: there are 2 kinds of the word 'month', one is specified in the user query "
             "(by name such as January, or by number such as 01, or relatively such as 'last 3 months'). This is referred to as a 'user month'. "
             "The other is the month to be stored in time_list, which is always in the format YYYY_MM. This is referred to as a 'time_list month'.\n"
-            "- all_years is true when the user does not provide a temporal constraint or explicitly asks for all years or all months.\n"
+            "- all_years is true only when the user does not provide a temporal constraint or explicitly asks for all data with the keyword 'all' beside the time unit.\n"
             "- latest is true when the user targets the latest available information or document.\n"
             "- earliest is true when the user targets the earliest (oldest) available information or document.\n"
             "- When the query includes user months that are either explicitly mentioned or can be inferred, generate corresponding time_list months "
