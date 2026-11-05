@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from datetime import date
 from typing import Dict, Any, List
 from typing_extensions import TypedDict
@@ -7,6 +8,14 @@ from langgraph.graph import StateGraph, START, END
 from langchain_ollama import ChatOllama
 from core_rag.citations import render_citations
 from core_rag.vector_store import LocalVectorStorage
+
+
+class TimeFilter(TypedDict):
+    all_years: bool
+    latest: bool
+    earliest: bool
+    time_list: List[str]
+
 
 # =====================================================================
 # 1. DEFINE THE AGENT STATE MACHINE DATA TYPE
@@ -17,6 +26,7 @@ class AgentState(TypedDict):
     """
     user_query: str
     target_tickers: List[str]
+    time_filter: TimeFilter
     timeline_keys: Dict[str, List[str]] # maps ticker -> relevant file keys ["2025_07"]  // generalized for any timeline
     analyst_factual_outputs: Dict[str, str] # maps ticker -> clean facts
     citation_sources: Dict[str, Dict[str, str]]
@@ -46,41 +56,87 @@ class LangGraphFinancialSwarm:
 
     # --- NODE 0: THE TEMPORAL QUERY ROUTER ---
     def node_query_parser(self, state: AgentState) -> Dict[str, Any]:
-        print(f"🧩 [NODE 0: ROUTER] Parsing time constraints and timeline logs...")
+        print(f"🧩 [NODE 0: ROUTER] Parsing temporal filters...")
 
         today = date.today()
-        current_year = today.year
-        current_month = today.month
-        
+        current_date = f"{today.year}-{today.month:02d}"
+
         prompt = (
-            f"PRESENT DATE: Year-{current_year}, Month-{current_month:02d}. Extract date filters from this query: '{state['user_query']}'\n"
-            "Return ONLY a raw valid JSON payload with this exact structure (no markdown wrappers):\n"
-            "{\"ticker\": \"INFY\", \"relative_count\": 4, \"explicit_years\": null}"
+            f"Current year and month: {current_date}.\n"
+            f"Parse the temporal intent in this user query: {state['user_query']!r}\n"
+            "Return ONLY a JSON object with exactly these keys and types, without markdown fences:\n"
+            '{"all_years": false, "latest": false, "earliest": false, "time_list": ["2026_06"]}\n'
+            "Rules:\n"
+            "- all_years is true when the user asks for all items/documents available in the database. "
+            "For a query with no temporal constraint, set all_years to true.\n"
+            "- latest is true when the user targets the latest available document.\n"
+            "- earliest is true when the user targets the earliest available document.\n"
+            "- Set each boolean independently according to the user's request. They may overlap; "
+            "when the filter is later applied, the consumer gives priority to all_years, then latest, "
+            "then earliest.\n"
+            "- If none of those modes applies, set all three booleans to false and populate time_list "
+            "with every requested calendar month as a zero-padded YYYY_MM string, in chronological "
+            "order, without duplicates. time_list must not be empty in this case.\n"
+            "- When the query includes an explicit date range or named months, populate time_list "
+            "with those months even if one or more booleans are true. If there is no explicit time "
+            "range, use an empty time_list.\n"
+            "- Expand explicit date ranges inclusively, including both endpoint months. Expand named "
+            "months and explicitly listed months to their YYYY_MM values. A year without a month "
+            "means all twelve months of that year.\n"
+            "- For 'last X months', include the current month and the preceding X-1 calendar months. "
+            "For 'last X years', include the current month and the preceding (12*X)-1 calendar months.\n"
+            "- Do not infer a narrower period when the user asks for all available data."
         )
-        
-        # Invoke the local model
+
         response = self.llm.invoke(prompt)
-        
-        try:
-            clean_str = response.content.strip().replace("```json", "").replace("```", "")
-            time_meta = json.loads(clean_str)
-        except Exception:
-            time_meta = {"ticker": None, "relative_count": 3}
+        clean_response = response.content.strip()
+        if clean_response.startswith("```"):
+            lines = clean_response.splitlines()
+            if lines[-1].strip() == "```":
+                lines = lines[1:-1]
+            else:
+                lines = lines[1:]
+            clean_response = "\n".join(lines).strip()
 
-        # Resolve which tickers are active
-        ticker_target = time_meta.get("ticker")
-        active_tickers = [ticker_target] if ticker_target and ticker_target != "null" else state["target_tickers"]
-        relative_count = time_meta.get("relative_count") or 3
+        time_filter = json.loads(clean_response)
+        expected_keys = {"all_years", "latest", "earliest", "time_list"}
+        if not isinstance(time_filter, dict) or set(time_filter) != expected_keys:
+            raise ValueError(
+                "Temporal filter response must contain exactly all_years, latest, "
+                "earliest, and time_list."
+            )
+        for field in ("all_years", "latest", "earliest"):
+            if type(time_filter[field]) is not bool:
+                raise ValueError(f"Temporal filter field {field!r} must be a boolean.")
 
-        # Map dynamic chronological file footprints for each ticker
-        timeline_keys = {}
-        for ticker in active_tickers:
-            full_timeline = self.db.get_company_timeline(ticker)  # WHAT?!
-            if full_timeline:
-                sliced = full_timeline[:int(relative_count)]
-                timeline_keys[ticker] = [item["key"] for item in sliced]
+        has_selected_mode = any(
+            time_filter[field] for field in ("all_years", "latest", "earliest")
+        )
 
-        return {"timeline_keys": timeline_keys, "target_tickers": active_tickers}
+        time_list = time_filter["time_list"]
+        if not isinstance(time_list, list):
+            raise ValueError("Temporal filter field 'time_list' must be a list.")
+        for timestamp in time_list:
+            if not isinstance(timestamp, str) or not re.fullmatch(
+                r"[0-9]{4}_(?:0[1-9]|1[0-2])", timestamp
+            ):
+                raise ValueError(
+                    f"Invalid time_list entry {timestamp!r}; expected YYYY_MM "
+                    "with a valid month."
+                )
+            if int(timestamp[:4]) < 1:
+                raise ValueError(f"Invalid time_list year in {timestamp!r}.")
+
+        if not has_selected_mode and not time_list:
+            raise ValueError(
+                "Temporal filter time_list must not be empty when all flags are false."
+            )
+        if len(time_list) != len(set(time_list)):
+            raise ValueError("Temporal filter time_list must not contain duplicates.")
+        if time_list != sorted(time_list):
+            raise ValueError("Temporal filter time_list must be in chronological order.")
+
+        return {"time_filter": time_filter}
 
     # --- NODE 1: THE RESEARCH ANALYST ---
     def node_research_analyst(self, state: AgentState) -> Dict[str, Any]:
@@ -217,6 +273,12 @@ class LangGraphFinancialSwarm:
         initial_state: AgentState = {
             "user_query": analysis_query,
             "target_tickers": default_portfolio,
+            "time_filter": {
+                "all_years": False,
+                "latest": False,
+                "earliest": False,
+                "time_list": []
+            },
             "timeline_keys": {},
             "analyst_factual_outputs": {},
             "citation_sources": {},
