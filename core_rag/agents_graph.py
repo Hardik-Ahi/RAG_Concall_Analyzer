@@ -8,6 +8,7 @@ from langgraph.graph import StateGraph, START, END
 from langchain_ollama import ChatOllama
 from core_rag.citations import render_citations
 from core_rag.vector_store import LocalVectorStorage
+from core_rag.retrieval import expand_question_parent_hits
 
 
 class TimeFilter(TypedDict):
@@ -179,11 +180,21 @@ class LangGraphFinancialSwarm:
             metadatas = search_results.get("metadatas") or []
             if metadatas and isinstance(metadatas[0], list):
                 metadatas = metadatas[0]
+            parent_hits = [
+                {"metadata": meta}
+                for meta in metadatas
+                if meta and meta.get("parent_id")
+            ]
+            expanded_parents = expand_question_parent_hits(
+                parent_hits=parent_hits,
+                db=self.db,
+                load_parent_text=self._load_parent_text,
+                get_classifier_response=lambda prompt: self.llm.invoke(prompt).content
+            )
             parent_contexts = {}
-            for meta in metadatas:
-                p_id = meta.get("parent_id")
-                if not p_id:
-                    continue
+            for parent in expanded_parents:
+                meta = parent["metadata"]
+                p_id = parent["parent_id"]
 
                 citation_metadata = {}
                 for field in ("year", "month", "index", "page_number", "speaker"):
@@ -205,7 +216,7 @@ class LangGraphFinancialSwarm:
 
                 if p_id not in parent_contexts:
                     parent_contexts[p_id] = {
-                        "text": self._load_parent_text(p_id),
+                        "text": parent["text"],
                         "source_ids": []
                     }
                 if source_id not in parent_contexts[p_id]["source_ids"]:
@@ -266,15 +277,12 @@ class LangGraphFinancialSwarm:
         
         # For LangGraph prototypes running locally, we can capture the complete text output block cleanly
         response = self.critic_llm.invoke(prompt)
-        return {"final_report": response.content}
-        '''
-        {
+        return {
             "final_report": render_citations(
                 response.content,
                 state["citation_sources"]
             )
         }
-        '''
 
     # =====================================================================
     # 3. ASSEMBLING THE COMPILATION GRAPH STATE MACHINE

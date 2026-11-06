@@ -14,6 +14,7 @@ def child_metadata(ticker="INFY", year="2025", month="07", index="1"):
         "year": year,
         "month": month,
         "index": index,
+        "speaker_number": "1",
         "page_number": "5",
         "speaker": "CEO",
     }
@@ -21,6 +22,8 @@ def child_metadata(ticker="INFY", year="2025", month="07", index="1"):
 
 class FakeLLM:
     def invoke(self, prompt):
+        if "Decide whether this transcript parent" in prompt:
+            return SimpleNamespace(content='{"is_question": false}')
         return SimpleNamespace(content="- Claim. [[S1]]")
 
 

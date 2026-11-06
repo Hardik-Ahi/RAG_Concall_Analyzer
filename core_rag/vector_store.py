@@ -52,6 +52,7 @@ class LocalVectorStorage:
                 "month": str(child["month"]),
                 "index": str(child["index"]),
                 "speaker": child["speaker"],
+                "speaker_number": str(child["speaker_number"]),
                 "page_number": str(child["page_number"])
             })
 
@@ -79,6 +80,41 @@ class LocalVectorStorage:
             where=where_filter if where_filter else None
         )
         return results
+
+    def get_parent_by_speaker_number(
+        self,
+        ticker: str,
+        year: str,
+        month: str,
+        index: str,
+        speaker_number: int
+    ) -> dict | None:
+        """Return metadata for the unique parent at a position in one transcript."""
+        where_filter = {
+            "$and": [
+                {"ticker": str(ticker)},
+                {"year": str(year)},
+                {"month": str(month)},
+                {"index": str(index)},
+                {"speaker_number": str(speaker_number)}
+            ]
+        }
+        results = self.collection.get(
+            where=where_filter,
+            include=["metadatas"]
+        )
+
+        metadatas = results.get("metadatas") or []
+        if not metadatas:
+            return None
+
+        parent_ids = {metadata.get("parent_id") for metadata in metadatas if metadata}
+        if len(parent_ids) != 1 or None in parent_ids:
+            raise ValueError(
+                "Expected one parent for transcript speaker number "
+                f"{speaker_number}, found {len(parent_ids)}."
+            )
+        return next(metadata for metadata in metadatas if metadata)
 
     def get_company_timeline(self, ticker: str) -> list[dict[str, str]]:
         """

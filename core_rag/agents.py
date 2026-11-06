@@ -2,6 +2,7 @@ import os
 import json
 import ollama
 from core_rag.vector_store import LocalVectorStorage
+from core_rag.retrieval import expand_question_parent_hits
 
 class FinancialAgentSwarm:
     def __init__(self, lookup_path: str = "parent_lookup.json"):
@@ -39,16 +40,21 @@ class FinancialAgentSwarm:
             print(f"Text Snippet:\n{child_text[:200]}...")
         print("==============================================================")
 
-        # 2. Relational context mapping step: Resolve children to parent blocks
-        parent_contexts = set()
-        for meta in metadatas:
-            p_id = meta.get("parent_id")
-            if p_id:
-                parent_text = self._load_parent_text(p_id)
-                parent_contexts.add(parent_text)
-
-        # Remove duplicate parent contexts if multiple child matches hit the same speech block
-        compiled_parent_context_str = "\n\n---\n\n".join(list(parent_contexts))
+        # 2. Resolve child hits to parents and add the next speaker for question parents.
+        parent_hits = [{"metadata": meta} for meta in metadatas]
+        parent_contexts = expand_question_parent_hits(
+            parent_hits=parent_hits,
+            db=self.db,
+            load_parent_text=self._load_parent_text,
+            get_classifier_response=lambda prompt: ollama.chat(
+                model="llama3.2",
+                messages=[{"role": "user", "content": prompt}],
+                options={"temperature": 0.0}
+            )["message"]["content"]
+        )
+        compiled_parent_context_str = "\n\n---\n\n".join(
+            item["text"] for item in parent_contexts
+        )
 
         # --- TRANSPARENT PRINT: VISUALIZE PARENT CONTEXT SENT TO LLM ---
         print(f"\n======== 🏛️ STEP 2: PARENT CHUNKS PASSED TO LLM ({ticker}) ========")

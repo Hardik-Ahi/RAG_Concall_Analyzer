@@ -13,17 +13,21 @@ class FakeDatabase:
             "metadatas": [
                 {
                     "parent_id": "parent-1",
+                    "ticker": "INFY",
                     "year": "2025",
                     "month": "07",
                     "index": "1",
+                    "speaker_number": "1",
                     "page_number": "5",
                     "speaker": "CEO",
                 },
                 {
                     "parent_id": "parent-2",
+                    "ticker": "INFY",
                     "year": "2025",
                     "month": "07",
                     "index": "2",
+                    "speaker_number": "1",
                     "page_number": "8",
                     "speaker": "CEO",
                 },
@@ -32,12 +36,17 @@ class FakeDatabase:
 
 
 class FakeLLM:
-    def __init__(self, content):
+    def __init__(self, content, is_question=False):
         self.content = content
+        self.is_question = is_question
         self.prompts = []
 
     def invoke(self, prompt):
         self.prompts.append(prompt)
+        if "Decide whether this transcript parent" in prompt:
+            return SimpleNamespace(
+                content='{"is_question": ' + str(self.is_question).lower() + '}'
+            )
         return SimpleNamespace(content=self.content)
 
 
@@ -121,12 +130,78 @@ class GraphCitationFlowTests(unittest.TestCase):
             analyst_state = swarm.node_research_analyst(initial_state)
             final_state = swarm.node_financial_critic({**initial_state, **analyst_state})
 
-        self.assertIn("[[S1]]", swarm.llm.prompts[0])
-        self.assertIn("[[S2]]", swarm.llm.prompts[0])
+        self.assertIn("[[S1]]", swarm.llm.prompts[-1])
+        self.assertIn("[[S2]]", swarm.llm.prompts[-1])
         self.assertEqual(
             final_state["final_report"],
             "## Findings\n- Final claim. (2025-07, index 1, p. 5, CEO) "
             "(2025-07, index 2, p. 8, CEO)",
+        )
+
+    def test_graph_includes_answer_parent_with_its_own_citation_metadata(self):
+        class QuestionDatabase(FakeDatabase):
+            def query_database_advanced(self, **kwargs):
+                result = super().query_database_advanced(**kwargs)
+                return {"metadatas": [dict(
+                    result["metadatas"][0],
+                    parent_id="question",
+                    speaker_number="3",
+                    speaker="Analyst",
+                    page_number="10",
+                )]}
+
+            def get_parent_by_speaker_number(self, **kwargs):
+                self.next_parent_query = kwargs
+                return {
+                    "parent_id": "answer",
+                    "ticker": "INFY",
+                    "year": "2025",
+                    "month": "07",
+                    "index": "1",
+                    "speaker_number": "4",
+                    "speaker": "CEO",
+                    "page_number": "11",
+                }
+
+        swarm = LangGraphFinancialSwarm.__new__(LangGraphFinancialSwarm)
+        swarm.db = QuestionDatabase()
+        swarm.llm = FakeLLM("- Analyst claim. [[S1]]", is_question=True)
+        swarm.critic_llm = FakeLLM("## Findings\n- Final claim. [[S2]]")
+        swarm._load_parent_text = lambda parent_id: {
+            "question": "Analyst: Could you explain the margin outlook?",
+            "answer": "CEO: We expect margins to expand.",
+        }[parent_id]
+        initial_state = {
+            "user_query": "What changed?",
+            "target_tickers": ["INFY"],
+            "time_filter": {
+                "all_years": False,
+                "latest": False,
+                "earliest": False,
+                "time_list": ["2025_07"],
+            },
+            "timeline_keys": {"INFY": ["2025_07"]},
+        }
+
+        with redirect_stdout(io.StringIO()):
+            analyst_state = swarm.node_research_analyst(initial_state)
+            final_state = swarm.node_financial_critic({**initial_state, **analyst_state})
+
+        self.assertIn("CEO: We expect margins to expand.", swarm.llm.prompts[1])
+        self.assertEqual(swarm.db.next_parent_query["speaker_number"], 4)
+        self.assertEqual(
+            analyst_state["citation_sources"]["S2"],
+            {
+                "year": "2025",
+                "month": "07",
+                "index": "1",
+                "page_number": "11",
+                "speaker": "CEO",
+            },
+        )
+        self.assertEqual(
+            final_state["final_report"],
+            "## Findings\n- Final claim. (2025-07, index 1, p. 11, CEO)",
         )
 
 
