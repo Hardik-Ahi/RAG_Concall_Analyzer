@@ -266,11 +266,11 @@ class LangGraphFinancialSwarm:
 
         prompt = (
             "You are an expert financial analyst. Use only the provided evidence to answer the "
-            "user's query. Produce section headings and Markdown bullet points. Every factual bullet "
-            "must end with one or more exact source ID markers from the provided citation sources. "
-            "Collapse each marker into the form [[S#]] where # is the source ID number, to be placed at the end of bullets."
-            "For combined claims, include every relevant source ID. "
-            "Do not make claims that lack a source ID. And at the end, provide the [[S#]] citation definitions as-is with all fields in Python dictionary format.\n\n"
+            "user's query. Produce section headings and Markdown bullet points. "
+            "Map a source ID marker to each provided citation source (which is a Python dictionary) in the form S1, S2, etc. "
+            "End every factual bullet with one or more exact source ID markers. "
+            "For combined claims, include every relevant source ID marker. "
+            "Do not make claims that lack a source ID. And at the end, list the mapping of all source ID markers to original citation dictionaries with all fields included.\n\n"
             f"Evidence:\n{raw_evidence}\n"
             f"User query: {state['user_query']}\n"
             f"Citation sources: {json.dumps(state['citation_sources'], indent=4)}\n"
