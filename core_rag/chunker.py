@@ -42,6 +42,7 @@ class HierarchicalTranscriptChunker:
 
         # Step 1: Chronologically combine text flows across pages
         page_number = -1  # Initialize page number here for trailing block also
+        previous_page_number = -1
         for page in parsed_pages:
             lines = page["content"].split("\n")
             page_number = page.get("page_number", -1)
@@ -58,13 +59,14 @@ class HierarchicalTranscriptChunker:
                         raw_speech_blocks.append({
                             "speaker": current_speaker,
                             "text": " ".join(current_block_text),
-                            "page_number": page_number
+                            "page_number": previous_page_number if previous_page_number != -1 else page_number
                         })
                     
                     current_speaker = speaker_match.group(0).strip()
                     # Strip the speaker name off the text segment
                     remaining_text = line_str[speaker_match.end():].strip()
                     current_block_text = [remaining_text] if remaining_text else []
+                    previous_page_number = page_number
                 else:
                     current_block_text.append(line_str)
 
@@ -74,7 +76,7 @@ class HierarchicalTranscriptChunker:
             raw_speech_blocks.append({
                 "speaker": current_speaker,
                 "text": " ".join(current_block_text),
-                "page_number": page_number
+                "page_number": previous_page_number if previous_page_number != -1 else page_number
             })
 
         # Step 2: Structure speech blocks into complete unique Parent Chunks

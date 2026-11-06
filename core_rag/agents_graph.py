@@ -254,23 +254,27 @@ class LangGraphFinancialSwarm:
             raw_evidence += f"=== EVIDENCE BASE FOR {ticker} ===\n{data}\n\n"
 
         prompt = (
-            "You are an expert financial analyst. Use only the source-backed evidence to answer the "
+            "You are an expert financial analyst. Use only the provided evidence to answer the "
             "user's query. Produce section headings and Markdown bullet points. Every factual bullet "
-            "must end with one or more exact source ID markers from the evidence; "
-            "preserve those markers unchanged. For combined claims, include every relevant source ID. "
-            "Do not make claims that lack a source ID.\n\n"
+            "must end with one or more exact source ID markers from the provided citation sources. "
+            "For combined claims, include every relevant source ID. "
+            "Do not make claims that lack a source ID. And at the end, provide the citation definitions as-is with all fields in Python dictionary format.\n\n"
             f"Evidence:\n{raw_evidence}\n"
-            f"User query: {state['user_query']}"
+            f"User query: {state['user_query']}\n"
+            f"Citation sources: {json.dumps(state['citation_sources'], indent=4)}\n"
         )
         
         # For LangGraph prototypes running locally, we can capture the complete text output block cleanly
         response = self.critic_llm.invoke(prompt)
-        return {
+        return {"final_report": response.content}
+        '''
+        {
             "final_report": render_citations(
                 response.content,
                 state["citation_sources"]
             )
         }
+        '''
 
     # =====================================================================
     # 3. ASSEMBLING THE COMPILATION GRAPH STATE MACHINE
