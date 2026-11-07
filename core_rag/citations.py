@@ -4,7 +4,7 @@ from typing import Dict
 
 _SOURCE_MARKER = re.compile(r"\[\[(S\d+)\]\]")
 _MARKDOWN_BULLET = re.compile(r"^\s*(?:[-*+•]|\d+[.)])\s+")
-_CITATION_FIELDS = ("year", "month", "index", "page_number", "speaker")
+_CITATION_FIELDS = ("year", "month", "index", "page_number", "speaker", "speaker_number")
 
 
 def render_citations(report: str, sources: Dict[str, Dict[str, str]]) -> str:

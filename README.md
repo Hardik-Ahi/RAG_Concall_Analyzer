@@ -58,8 +58,9 @@ pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
-The page submits queries to the existing LangGraph workflow for the `INFY` portfolio and displays
-the financial critic's final report. The lower panels provide read-only views of available PDF
+The page submits queries to the existing LangGraph workflow for the `INFY` portfolio and refreshes
+the intermediate-output box as each graph node completes. The final report is displayed separately
+after the financial critic completes. The lower panels provide read-only views of available PDF
 filenames, the ChromaDB child-chunk schema and metadata types, the parent lookup structure, agent
 connections, model names, and supported query patterns. The frontend does not ingest documents,
 rebuild chunks, or write to the vector database or lookup file.

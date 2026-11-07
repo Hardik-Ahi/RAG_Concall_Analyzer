@@ -50,6 +50,27 @@ class GraphTraceTests(unittest.TestCase):
         self.assertEqual(initial_state["user_query"], "Analyze performance.")
         self.assertEqual(initial_state["target_tickers"], ["INFY"])
 
+    def test_node_events_are_yielded_before_graph_stream_finishes(self):
+        def partial_graph_stream(*args, **kwargs):
+            yield {"query_parser": {"time_filter": {"latest": True}}}
+            yield {
+                "research_analyst": {
+                    "analyst_factual_outputs": {"INFY": "- Revenue grew."},
+                    "citation_sources": {},
+                }
+            }
+            raise RuntimeError("analyst completed, critic failed")
+
+        self.swarm.graph.stream.side_effect = partial_graph_stream
+        events = self.swarm.stream_market_landscape("Analyze performance.", ["INFY"])
+
+        first_event = next(events)
+        self.assertEqual(first_event["node"], "query_parser")
+        second_event = next(events)
+        self.assertEqual(second_event["node"], "research_analyst")
+        with self.assertRaisesRegex(RuntimeError, "critic failed"):
+            next(events)
+
     def test_existing_method_returns_only_final_report(self):
         self.swarm.analyze_market_landscape_with_trace = Mock(
             return_value=([{"node": "financial_critic", "state_update": {}}], "Final answer.")

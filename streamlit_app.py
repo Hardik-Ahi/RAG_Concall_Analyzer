@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Callable, Iterator, Protocol
 
 import streamlit as st
 
@@ -22,11 +22,11 @@ AGENT_CONNECTIONS = (
 
 
 class AnalysisSwarm(Protocol):
-    def analyze_market_landscape_with_trace(
+    def stream_market_landscape(
         self,
         analysis_query: str,
         default_portfolio: list[str],
-    ) -> tuple[list[dict], str]: ...
+    ) -> Iterator[dict]: ...
 
 
 def list_pdf_names(root: Path = ROOT_DIR) -> list[str]:
@@ -140,14 +140,14 @@ def parent_text_excerpt(text: str, max_length: int = 1350) -> str:
 def run_analysis_query(
     query: str,
     swarm_factory: Callable[[], AnalysisSwarm],
-) -> tuple[list[dict], str]:
-    """Run the existing graph and return node updates separately from its final report."""
+) -> Iterator[dict]:
+    """Return a lazy stream of graph node updates and the final report."""
     normalized_query = query.strip()
     if not normalized_query:
         raise ValueError("Enter a query before running the analysis.")
 
     swarm = swarm_factory()
-    return swarm.analyze_market_landscape_with_trace(
+    return swarm.stream_market_landscape(
         normalized_query,
         DEFAULT_PORTFOLIO,
     )
@@ -302,6 +302,11 @@ def main() -> None:
         )
         submitted = st.form_submit_button("Run analysis", type="primary")
 
+    st.subheader("Intermediate agent outputs")
+    intermediate_placeholder = st.empty()
+    st.subheader("Final report")
+    final_report_placeholder = st.empty()
+
     if submitted:
         if not query.strip():
             st.error("Enter a query before running the analysis.")
@@ -309,34 +314,58 @@ def main() -> None:
             st.session_state.pop("intermediate_outputs", None)
             st.session_state.pop("final_report", None)
             st.session_state.pop("last_query", None)
-            with st.spinner("Running the local agent graph and searching ChromaDB..."):
-                node_updates, report = run_analysis_query(query, get_swarm)
-            st.session_state["intermediate_outputs"] = format_intermediate_outputs(
-                node_updates
-            )
-            st.session_state["final_report"] = report
+            node_updates = []
             st.session_state["last_query"] = query.strip()
+            intermediate_placeholder.info("Waiting for the first agent node...")
+            final_report_placeholder.info(
+                "The final report will appear after the financial critic completes."
+            )
+            with st.spinner("Running the local agent graph and searching ChromaDB..."):
+                for event in run_analysis_query(query, get_swarm):
+                    if "final_report" in event:
+                        st.session_state["final_report"] = event["final_report"]
+                        final_report_placeholder.code(
+                            event["final_report"],
+                            language="markdown",
+                            wrap_lines=True,
+                        )
+                        continue
 
-    st.subheader("Intermediate agent outputs")
-    if "intermediate_outputs" in st.session_state:
-        st.caption(
-            "Each section shows a graph node and the state fields it updated. "
-            "The final report is displayed separately below."
-        )
-        st.code(
-            st.session_state["intermediate_outputs"],
-            language="text",
-            wrap_lines=True,
-        )
+                    node_updates.append(event)
+                    st.session_state["intermediate_outputs"] = (
+                        format_intermediate_outputs(node_updates)
+                    )
+                    intermediate_placeholder.code(
+                        st.session_state["intermediate_outputs"],
+                        language="text",
+                        wrap_lines=True,
+                    )
     else:
-        st.info("Submit a query to display the intermediate agent outputs.")
+        if "intermediate_outputs" in st.session_state:
+            st.caption(
+                f"Query: {st.session_state.get('last_query', '')} — "
+                "each section shows a completed node's state update."
+            )
+            intermediate_placeholder.code(
+                st.session_state["intermediate_outputs"],
+                language="text",
+                wrap_lines=True,
+            )
+        else:
+            intermediate_placeholder.info(
+                "Submit a query to display the intermediate agent outputs."
+            )
 
-    st.subheader("Final report")
-    if "final_report" in st.session_state:
-        st.caption(f"Query: {st.session_state['last_query']}")
-        st.code(st.session_state["final_report"], language="markdown", wrap_lines=True)
-    else:
-        st.info("Submit a query to display the final report from the financial critic agent.")
+        if "final_report" in st.session_state:
+            final_report_placeholder.code(
+                st.session_state["final_report"],
+                language="markdown",
+                wrap_lines=True,
+            )
+        else:
+            final_report_placeholder.info(
+                "Submit a query to display the final report from the financial critic agent."
+            )
 
     st.divider()
     render_inventory()

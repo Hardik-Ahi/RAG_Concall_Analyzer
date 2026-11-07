@@ -2,7 +2,7 @@ import os
 import json
 import re
 from datetime import date
-from typing import Dict, Any, List
+from typing import Dict, Any, Iterator, List
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langchain_ollama import ChatOllama
@@ -204,7 +204,7 @@ class LangGraphFinancialSwarm:
                 p_id = parent["parent_id"]
 
                 citation_metadata = {}
-                for field in ("year", "month", "index", "page_number", "speaker"):
+                for field in ("year", "month", "index", "page_number", "speaker", "speaker_number"):
                     value = meta.get(field)
                     if value is None or not str(value).strip():
                         raise ValueError(
@@ -213,7 +213,7 @@ class LangGraphFinancialSwarm:
                     citation_metadata[field] = str(value).strip()
 
                 source_key = (ticker, *(citation_metadata[field] for field in (
-                    "year", "month", "index", "page_number", "speaker"
+                    "year", "month", "index", "page_number", "speaker", "speaker_number"
                 )))
                 source_id = source_ids_by_metadata.get(source_key)
                 if source_id is None:
@@ -320,6 +320,24 @@ class LangGraphFinancialSwarm:
         default_portfolio: List[str]
     ) -> tuple[List[Dict[str, Any]], str]:
         """Run the graph and return node state updates separately from its final report."""
+        node_updates = []
+        final_report = None
+        for event in self.stream_market_landscape(analysis_query, default_portfolio):
+            if "final_report" in event:
+                final_report = event["final_report"]
+            else:
+                node_updates.append(event)
+
+        if final_report is None:
+            raise RuntimeError("Financial critic graph node did not produce a final report.")
+        return node_updates, final_report
+
+    def stream_market_landscape(
+        self,
+        analysis_query: str,
+        default_portfolio: List[str]
+    ) -> Iterator[Dict[str, Any]]:
+        """Yield each completed node's state delta before the graph finishes."""
         # Initialize the global state dictionary payload input configurations
         initial_state: AgentState = {
             "user_query": analysis_query,
@@ -336,7 +354,6 @@ class LangGraphFinancialSwarm:
             "final_report": ""
         }
 
-        node_updates = []
         final_report = None
         for update in self.graph.stream(initial_state, stream_mode="updates"):
             for node_name, state_update in update.items():
@@ -352,16 +369,16 @@ class LangGraphFinancialSwarm:
                     for key, value in state_update.items()
                     if key != "final_report"
                 }
-                node_updates.append({
+                yield {
                     "node": node_name,
                     "state_update": intermediate_update,
-                })
+                }
 
         if final_report is None:
             raise RuntimeError("Financial critic graph node did not produce a final report.")
         if not isinstance(final_report, str):
             raise ValueError("Financial critic final report must be a string.")
-        return node_updates, final_report
+        yield {"final_report": final_report}
 
     def analyze_market_landscape(self, analysis_query: str, default_portfolio: List[str]) -> str:
         """Invoke the graph and return only its final report, preserving the CLI API."""

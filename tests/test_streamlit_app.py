@@ -133,19 +133,19 @@ class StreamlitAppTests(unittest.TestCase):
 
     def test_submitted_query_uses_existing_graph_and_fixed_portfolio(self):
         swarm = Mock()
-        swarm.analyze_market_landscape_with_trace.return_value = (
-            [{"node": "query_parser", "state_update": {"time_filter": {}}}],
-            "Final report",
-        )
+        events = [
+            {"node": "query_parser", "state_update": {"time_filter": {}}},
+            {"final_report": "Final report"},
+        ]
+        swarm.stream_market_landscape.return_value = iter(events)
 
-        node_updates, report = run_analysis_query(
+        actual_events = list(run_analysis_query(
             "  Analyze performance.  ",
             lambda: swarm,
-        )
+        ))
 
-        self.assertEqual(node_updates[0]["node"], "query_parser")
-        self.assertEqual(report, "Final report")
-        swarm.analyze_market_landscape_with_trace.assert_called_once_with(
+        self.assertEqual(actual_events, events)
+        swarm.stream_market_landscape.assert_called_once_with(
             "Analyze performance.",
             ["INFY"],
         )
