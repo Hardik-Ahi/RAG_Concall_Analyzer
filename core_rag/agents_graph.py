@@ -75,23 +75,52 @@ class LangGraphFinancialSwarm:
             "Return ONLY a JSON object with exactly these keys and types, without markdown fences:\n"
             '{"all_years": Boolean, "latest": Boolean, "earliest": Boolean}\n'
             "Rules:\n"
-            "- 'all_years' is true only when the user does not provide a temporal constraint or explicitly asks for all data with the keyword 'all' beside the time unit. "
-            "If all_years is true, no need to populate time_list.\n"
+            "- 'all_years' is true only when the user does not provide a temporal constraint or explicitly asks for all data with the keyword 'all' beside the time unit.\n"
             "- 'latest' is true when the user mentions the keywords 'latest' or 'newest' for the data.\n"
             "- 'earliest' is true when the user mentions the keywords 'earliest' or 'oldest' for the data.\n"
         )
 
         response = self.llm.invoke(prompt)
-        clean_response = response.content.strip()
-        if clean_response.startswith("```"):
-            lines = clean_response.splitlines()
-            if lines[-1].strip() == "```":
-                lines = lines[1:-1]
-            else:
-                lines = lines[1:]
-            clean_response = "\n".join(lines).strip()
 
-        time_filter = json.loads(clean_response)
+        def parse_json_response(content: str) -> Any:
+            clean_content = content.strip()
+            if clean_content.startswith("```"):
+                lines = clean_content.splitlines()
+                if lines[-1].strip() == "```":
+                    lines = lines[1:-1]
+                else:
+                    lines = lines[1:]
+                clean_content = "\n".join(lines).strip()
+            return json.loads(clean_content)
+
+        mode_filter = parse_json_response(response.content)
+        expected_mode_keys = {"all_years", "latest", "earliest"}
+        if not isinstance(mode_filter, dict) or set(mode_filter) != expected_mode_keys:
+            raise ValueError(
+                "Temporal mode response must contain exactly all_years, latest, and earliest."
+            )
+        for field in ("all_years", "latest", "earliest"):
+            if type(mode_filter[field]) is not bool:
+                raise ValueError(f"Temporal filter field {field!r} must be a boolean.")
+
+        if any(mode_filter.values()):
+            time_filter = {**mode_filter, "time_list": []}
+        else:
+            time_list_prompt = (
+                f"Current year and month: {current_date}.\n"
+                f"Parse the requested time period from this user query: {state['user_query']!r}\n"
+                "Return ONLY a JSON array of strings, with every requested month represented "
+                'as "YYYY_MM" (for example: ["2026_06", "2026_07"]).\n'
+                "Rules:\n"
+                "- Convert each explicitly named or listed month to its corresponding YYYY_MM value.\n"
+                "- Expand explicit date ranges inclusively, including both endpoint months.\n"
+                "- If the query specifies a year without a month, include all 12 months of that year.\n"
+                "- Do not return an empty array."
+            )
+            time_list_response = self.llm.invoke(time_list_prompt)
+            time_list = parse_json_response(time_list_response.content)
+            time_filter = {**mode_filter, "time_list": time_list}
+
         expected_keys = {"all_years", "latest", "earliest", "time_list"}
         if not isinstance(time_filter, dict) or set(time_filter) != expected_keys:
             raise ValueError(
