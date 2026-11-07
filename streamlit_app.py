@@ -22,11 +22,11 @@ AGENT_CONNECTIONS = (
 
 
 class AnalysisSwarm(Protocol):
-    def analyze_market_landscape(
+    def analyze_market_landscape_with_trace(
         self,
         analysis_query: str,
         default_portfolio: list[str],
-    ) -> str: ...
+    ) -> tuple[list[dict], str]: ...
 
 
 def list_pdf_names(root: Path = ROOT_DIR) -> list[str]:
@@ -140,14 +140,33 @@ def parent_text_excerpt(text: str, max_length: int = 1350) -> str:
 def run_analysis_query(
     query: str,
     swarm_factory: Callable[[], AnalysisSwarm],
-) -> str:
-    """Run the existing graph against the fixed portfolio, without ingesting data."""
+) -> tuple[list[dict], str]:
+    """Run the existing graph and return node updates separately from its final report."""
     normalized_query = query.strip()
     if not normalized_query:
         raise ValueError("Enter a query before running the analysis.")
 
     swarm = swarm_factory()
-    return swarm.analyze_market_landscape(normalized_query, DEFAULT_PORTFOLIO)
+    return swarm.analyze_market_landscape_with_trace(
+        normalized_query,
+        DEFAULT_PORTFOLIO,
+    )
+
+
+def format_intermediate_outputs(node_updates: list[dict]) -> str:
+    """Format each node's state delta without duplicating the final report."""
+    formatted_nodes = []
+    for update in node_updates:
+        node_name = update["node"]
+        state_update = update["state_update"]
+        if state_update:
+            output = json.dumps(state_update, indent=2, ensure_ascii=False, default=str)
+        elif node_name == "financial_critic":
+            output = "Final report is shown in the separate output box below."
+        else:
+            output = "No intermediate state updates."
+        formatted_nodes.append(f"=== {node_name} ===\n{output}")
+    return "\n\n".join(formatted_nodes)
 
 
 @st.cache_resource
@@ -287,10 +306,30 @@ def main() -> None:
         if not query.strip():
             st.error("Enter a query before running the analysis.")
         else:
+            st.session_state.pop("intermediate_outputs", None)
+            st.session_state.pop("final_report", None)
+            st.session_state.pop("last_query", None)
             with st.spinner("Running the local agent graph and searching ChromaDB..."):
-                report = run_analysis_query(query, get_swarm)
+                node_updates, report = run_analysis_query(query, get_swarm)
+            st.session_state["intermediate_outputs"] = format_intermediate_outputs(
+                node_updates
+            )
             st.session_state["final_report"] = report
             st.session_state["last_query"] = query.strip()
+
+    st.subheader("Intermediate agent outputs")
+    if "intermediate_outputs" in st.session_state:
+        st.caption(
+            "Each section shows a graph node and the state fields it updated. "
+            "The final report is displayed separately below."
+        )
+        st.code(
+            st.session_state["intermediate_outputs"],
+            language="text",
+            wrap_lines=True,
+        )
+    else:
+        st.info("Submit a query to display the intermediate agent outputs.")
 
     st.subheader("Final report")
     if "final_report" in st.session_state:

@@ -11,6 +11,7 @@ from streamlit_app import (
     load_child_chunk_example,
     list_pdf_names,
     load_parent_lookup_summary,
+    format_intermediate_outputs,
     parent_text_excerpt,
     run_analysis_query,
 )
@@ -132,13 +133,21 @@ class StreamlitAppTests(unittest.TestCase):
 
     def test_submitted_query_uses_existing_graph_and_fixed_portfolio(self):
         swarm = Mock()
-        swarm.analyze_market_landscape.return_value = "Final report"
+        swarm.analyze_market_landscape_with_trace.return_value = (
+            [{"node": "query_parser", "state_update": {"time_filter": {}}}],
+            "Final report",
+        )
 
-        report = run_analysis_query("  Analyze performance.  ", lambda: swarm)
+        node_updates, report = run_analysis_query(
+            "  Analyze performance.  ",
+            lambda: swarm,
+        )
 
+        self.assertEqual(node_updates[0]["node"], "query_parser")
         self.assertEqual(report, "Final report")
-        swarm.analyze_market_landscape.assert_called_once_with(
-            "Analyze performance.", ["INFY"]
+        swarm.analyze_market_landscape_with_trace.assert_called_once_with(
+            "Analyze performance.",
+            ["INFY"],
         )
 
     def test_rejects_blank_query_without_creating_graph(self):
@@ -148,6 +157,33 @@ class StreamlitAppTests(unittest.TestCase):
             run_analysis_query("  ", swarm_factory)
 
         swarm_factory.assert_not_called()
+
+    def test_formats_node_updates_without_repeating_final_report(self):
+        formatted = format_intermediate_outputs([
+            {
+                "node": "query_parser",
+                "state_update": {"time_filter": {"latest": True}},
+            },
+            {
+                "node": "research_analyst",
+                "state_update": {
+                    "analyst_factual_outputs": {"INFY": "- Revenue grew."},
+                    "citation_sources": {"S1": {"year": "2025"}},
+                },
+            },
+            {
+                "node": "financial_critic",
+                "state_update": {},
+            },
+        ])
+
+        self.assertIn("=== query_parser ===", formatted)
+        self.assertIn("=== research_analyst ===", formatted)
+        self.assertIn("citation_sources", formatted)
+        self.assertIn("=== financial_critic ===", formatted)
+        self.assertIn("Final report is shown in the separate output box below.", formatted)
+        self.assertNotIn("- Revenue grew.", formatted.split("=== financial_critic ===")[1])
+        self.assertNotIn("final_report", formatted)
 
 
 if __name__ == "__main__":

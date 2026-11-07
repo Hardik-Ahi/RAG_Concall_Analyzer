@@ -314,8 +314,12 @@ class LangGraphFinancialSwarm:
         
         return builder.compile()
 
-    def analyze_market_landscape(self, analysis_query: str, default_portfolio: List[str]) -> str:
-        """Invokes the LangGraph state machine workflow runtime engine."""
+    def analyze_market_landscape_with_trace(
+        self,
+        analysis_query: str,
+        default_portfolio: List[str]
+    ) -> tuple[List[Dict[str, Any]], str]:
+        """Run the graph and return node state updates separately from its final report."""
         # Initialize the global state dictionary payload input configurations
         initial_state: AgentState = {
             "user_query": analysis_query,
@@ -331,7 +335,38 @@ class LangGraphFinancialSwarm:
             "citation_sources": {},
             "final_report": ""
         }
-        
-        # Run graph instance execution loops
-        final_output_state = self.graph.invoke(initial_state)
-        return final_output_state["final_report"]
+
+        node_updates = []
+        final_report = None
+        for update in self.graph.stream(initial_state, stream_mode="updates"):
+            for node_name, state_update in update.items():
+                if not isinstance(state_update, dict):
+                    raise ValueError(
+                        f"Graph node {node_name!r} returned a non-dictionary state update."
+                    )
+                final_report_update = state_update.get("final_report")
+                if final_report_update is not None:
+                    final_report = final_report_update
+                intermediate_update = {
+                    key: value
+                    for key, value in state_update.items()
+                    if key != "final_report"
+                }
+                node_updates.append({
+                    "node": node_name,
+                    "state_update": intermediate_update,
+                })
+
+        if final_report is None:
+            raise RuntimeError("Financial critic graph node did not produce a final report.")
+        if not isinstance(final_report, str):
+            raise ValueError("Financial critic final report must be a string.")
+        return node_updates, final_report
+
+    def analyze_market_landscape(self, analysis_query: str, default_portfolio: List[str]) -> str:
+        """Invoke the graph and return only its final report, preserving the CLI API."""
+        _, final_report = self.analyze_market_landscape_with_trace(
+            analysis_query,
+            default_portfolio
+        )
+        return final_report
