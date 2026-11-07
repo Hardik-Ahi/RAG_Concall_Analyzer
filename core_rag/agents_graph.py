@@ -73,15 +73,12 @@ class LangGraphFinancialSwarm:
             f"Current year and month: {current_date}.\n"
             f"Parse the temporal intent in this user query: {state['user_query']!r}\n"
             "Return ONLY a JSON object with exactly these keys and types, without markdown fences:\n"
-            '{"all_years": Boolean, "latest": Boolean, "earliest": Boolean, "time_list": List[String]}\n'
+            '{"all_years": Boolean, "latest": Boolean, "earliest": Boolean}\n'
             "Rules:\n"
             "- 'all_years' is true only when the user does not provide a temporal constraint or explicitly asks for all data with the keyword 'all' beside the time unit. "
             "If all_years is true, no need to populate time_list.\n"
             "- 'latest' is true when the user mentions the keywords 'latest' or 'newest' for the data.\n"
             "- 'earliest' is true when the user mentions the keywords 'earliest' or 'oldest' for the data.\n"
-            "- When the query includes user months that are either explicitly mentioned or can be inferred, generate corresponding time_list months. "
-            "The month to be stored in time_list is always in the format YYYY_MM. This is referred to as a 'time_list month'.\n"
-            "- A year in the user query means all completed months of that year. Example: 2020 -> 2020_01, 2020_02, ..., 2020_12.\n"
         )
 
         response = self.llm.invoke(prompt)
