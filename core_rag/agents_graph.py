@@ -10,6 +10,9 @@ from core_rag.citations import render_citations
 from core_rag.vector_store import LocalVectorStorage
 from core_rag.retrieval import expand_question_parent_hits
 
+LLM_MODEL = "llama3.2"
+CRITIC_LLM_MODEL = "llama3.2"
+
 
 class TimeFilter(TypedDict):
     all_years: bool
@@ -37,13 +40,17 @@ class AgentState(TypedDict):
 # 2. THE LANGGRAPH WORKFLOW ENGINES
 # =====================================================================
 class LangGraphFinancialSwarm:
-    def __init__(self, lookup_path: str = "parent_lookup.json"):
-        self.db = LocalVectorStorage()
+    def __init__(
+        self,
+        lookup_path: str = "parent_lookup.json",
+        db_dir: str = "chroma_db"
+    ):
+        self.db = LocalVectorStorage(db_dir=db_dir)
         self.lookup_path = lookup_path
         
         # Instantiate open-source local LangChain wrappers around your Ollama model
-        self.llm = ChatOllama(model="llama3.2", temperature=0.0)
-        self.critic_llm = ChatOllama(model="llama3.2", temperature=0.3)
+        self.llm = ChatOllama(model=LLM_MODEL, temperature=0.0)
+        self.critic_llm = ChatOllama(model=CRITIC_LLM_MODEL, temperature=0.3)
         
         # Build the functional graph execution structure
         self.graph = self._compile_agent_graph()

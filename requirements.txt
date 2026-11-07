@@ -4,6 +4,9 @@ anthropic
 pydantic>=2.0
 
 # RAG & Vector Data
+chromadb
+langgraph
+langchain-ollama
 pinecone-client
 rank-bm25
 sentence-transformers
@@ -15,6 +18,7 @@ uvicorn
 requests
 beautifulsoup4
 playwright
+streamlit
 
 # Dev Tools
 python-dotenv

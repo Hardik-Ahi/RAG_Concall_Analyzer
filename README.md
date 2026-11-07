@@ -48,3 +48,18 @@ from the metadata of the retrieved child chunks and use this format:
 For example: `- Revenue grew. (2025-07, index 2, p. 12)`. If a generated bullet does not include a
 valid source ID, or a retrieved source is missing required citation metadata, the graph reports an
 error rather than presenting an unsupported citation.
+
+### Streamlit frontend
+
+Install the project dependencies, then run the frontend from the repository root:
+
+```powershell
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+The page submits queries to the existing LangGraph workflow for the `INFY` portfolio and displays
+the financial critic's final report. The lower panels provide read-only views of available PDF
+filenames, the ChromaDB child-chunk schema and metadata types, the parent lookup structure, agent
+connections, model names, and supported query patterns. The frontend does not ingest documents,
+rebuild chunks, or write to the vector database or lookup file.

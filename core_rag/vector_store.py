@@ -4,6 +4,20 @@ from chromadb.utils import embedding_functions
 from pathlib import Path
 from dotenv import load_dotenv
 
+CHROMA_COLLECTION_NAME = "infosys_financial_transcripts"
+EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+CHILD_METADATA_FIELDS = (
+    "parent_id",
+    "ticker",
+    "year",
+    "month",
+    "index",
+    "speaker",
+    "speaker_number",
+    "page_number",
+)
+
+
 class LocalVectorStorage:
     def __init__(self, db_dir: str = "chroma_db"):
         self.db_dir = db_dir
@@ -15,12 +29,12 @@ class LocalVectorStorage:
         # 2. Setup the free BGE Embedding Function (Automatically downloads and runs model locally)
         print("🧠 Loading local BAAI/bge-small-en-v1.5 embedding model...")
         self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="BAAI/bge-small-en-v1.5"
+            model_name=EMBEDDING_MODEL
         )
         
         # 3. Create or fetch our dynamic collection array
         self.collection = self.client.get_or_create_collection(
-            name="infosys_financial_transcripts",
+            name=CHROMA_COLLECTION_NAME,
             embedding_function=self.embedding_fn,
             metadata={"hnsw:space": "cosine"} # Use cosine similarity
         )
@@ -46,14 +60,8 @@ class LocalVectorStorage:
             
             # Pack all attributes we want to filter on later into the metadata dict
             metadatas.append({
-                "parent_id": child["parent_id"],
-                "ticker": child["ticker"],
-                "year": str(child["year"]),
-                "month": str(child["month"]),
-                "index": str(child["index"]),
-                "speaker": child["speaker"],
-                "speaker_number": str(child["speaker_number"]),
-                "page_number": str(child["page_number"])
+                field: str(child[field])
+                for field in CHILD_METADATA_FIELDS
             })
 
         # Batch upload vectors to the local database cluster
