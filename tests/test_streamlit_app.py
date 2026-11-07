@@ -2,12 +2,16 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from types import SimpleNamespace
+from unittest.mock import Mock, call, patch
 
 from streamlit_app import (
+    CHILD_EXAMPLE_SPEAKER,
     CHILD_METADATA_SCHEMA,
+    load_child_chunk_example,
     list_pdf_names,
     load_parent_lookup_summary,
+    parent_text_excerpt,
     run_analysis_query,
 )
 
@@ -63,6 +67,68 @@ class StreamlitAppTests(unittest.TestCase):
             },
         )
         self.assertTrue(all(value == "str" for value in CHILD_METADATA_SCHEMA.values()))
+
+    @patch("streamlit_app.load_parent_lookup", return_value={"parent-id": "A" * 2000})
+    @patch("chromadb.PersistentClient")
+    def test_loads_one_child_chunk_example_without_embeddings(
+        self,
+        persistent_client,
+        parent_lookup,
+    ):
+        collection = Mock()
+        collection.get.side_effect = [
+            {"metadatas": [{
+                "parent_id": "parent-id",
+                "speaker": CHILD_EXAMPLE_SPEAKER,
+            }]},
+            {
+                "ids": ["child-id"],
+                "documents": ["Enriched transcript text"],
+                "metadatas": [{
+                    "parent_id": "parent-id",
+                    "ticker": "INFY",
+                    "year": "2025",
+                    "month": "07",
+                    "index": "1",
+                    "speaker": CHILD_EXAMPLE_SPEAKER,
+                    "speaker_number": "1",
+                    "page_number": "5",
+                }],
+            },
+        ]
+        client = persistent_client.return_value
+        client.list_collections.return_value = [
+            SimpleNamespace(name="infosys_financial_transcripts")
+        ]
+        client.get_collection.return_value = collection
+
+        example = load_child_chunk_example(Path("project"))
+
+        self.assertEqual(example["id"], "child-id")
+        self.assertEqual(example["document"], "Enriched transcript text")
+        self.assertEqual(example["metadata"]["parent_id"], "parent-id")
+        self.assertEqual(example["metadata"]["speaker"], CHILD_EXAMPLE_SPEAKER)
+        self.assertEqual(
+            collection.get.call_args_list,
+            [
+                call(
+                    where={"speaker": CHILD_EXAMPLE_SPEAKER},
+                    include=["metadatas"],
+                ),
+                call(
+                    where={"parent_id": "parent-id"},
+                    limit=1,
+                    include=["documents", "metadatas"],
+                ),
+            ],
+        )
+
+    def test_parent_text_excerpt_is_bounded_and_marks_truncation(self):
+        self.assertEqual(parent_text_excerpt("short text"), "short text...")
+        self.assertEqual(parent_text_excerpt("abcdef", max_length=3), "abc...")
+        excerpt = parent_text_excerpt("x" * 1400)
+        self.assertEqual(len(excerpt), 1353)
+        self.assertTrue(excerpt.endswith("..."))
 
     def test_submitted_query_uses_existing_graph_and_fixed_portfolio(self):
         swarm = Mock()

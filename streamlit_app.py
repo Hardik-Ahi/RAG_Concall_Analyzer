@@ -14,6 +14,7 @@ from core_rag.vector_store import (
 
 ROOT_DIR = Path(__file__).resolve().parent
 DEFAULT_PORTFOLIO = ["INFY"]
+CHILD_EXAMPLE_SPEAKER = "Salil Parekh"
 CHILD_METADATA_SCHEMA = {field: "str" for field in CHILD_METADATA_FIELDS}
 AGENT_CONNECTIONS = (
     "START → query_parser → research_analyst → financial_critic → END"
@@ -42,9 +43,18 @@ def list_pdf_names(root: Path = ROOT_DIR) -> list[str]:
 
 def load_parent_lookup_summary(root: Path = ROOT_DIR) -> dict[str, int | bool]:
     """Read the lookup map only to validate its shape and count its entries."""
+    lookup = load_parent_lookup(root)
+    if lookup is None:
+        return {"exists": False, "entry_count": 0}
+
+    return {"exists": True, "entry_count": len(lookup)}
+
+
+def load_parent_lookup(root: Path = ROOT_DIR) -> dict[str, str] | None:
+    """Load and validate the read-only parent lookup map."""
     lookup_path = root / "parent_lookup.json"
     if not lookup_path.is_file():
-        return {"exists": False, "entry_count": 0}
+        return None
 
     with lookup_path.open("r", encoding="utf-8") as lookup_file:
         lookup = json.load(lookup_file)
@@ -53,7 +63,78 @@ def load_parent_lookup_summary(root: Path = ROOT_DIR) -> dict[str, int | bool]:
     if any(not isinstance(parent_id, str) or not isinstance(text, str)
            for parent_id, text in lookup.items()):
         raise ValueError("parent_lookup.json must map string parent IDs to string text.")
-    return {"exists": True, "entry_count": len(lookup)}
+    return lookup
+
+
+def load_child_chunk_example(root: Path = ROOT_DIR) -> dict | None:
+    """Read a child chunk belonging to the longest available speaker turn."""
+    import chromadb
+
+    client = chromadb.PersistentClient(path=str(root / "chroma_db"))
+    collection_names = {collection.name for collection in client.list_collections()}
+    if CHROMA_COLLECTION_NAME not in collection_names:
+        return None
+
+    collection = client.get_collection(name=CHROMA_COLLECTION_NAME)
+    parent_lookup = load_parent_lookup(root)
+    if not parent_lookup:
+        return None
+
+    parent_records = collection.get(
+        where={"speaker": CHILD_EXAMPLE_SPEAKER},
+        include=["metadatas"],
+    )
+    metadatas = parent_records.get("metadatas") or []
+    matching_parents = {
+        metadata["parent_id"]
+        for metadata in metadatas
+        if metadata
+        and metadata.get("speaker") == CHILD_EXAMPLE_SPEAKER
+        and metadata.get("parent_id") in parent_lookup
+    }
+    if not matching_parents:
+        return None
+
+    parent_id = max(matching_parents, key=lambda key: len(parent_lookup[key]))
+    records = collection.get(
+        where={"parent_id": parent_id},
+        limit=1,
+        include=["documents", "metadatas"],
+    )
+    ids = records.get("ids") or []
+    documents = records.get("documents") or []
+    metadatas = records.get("metadatas") or []
+    if not ids:
+        return None
+    if len(documents) != len(ids) or len(metadatas) != len(ids):
+        raise ValueError("ChromaDB returned an incomplete child-chunk example.")
+
+    metadata = metadatas[0]
+    if not isinstance(metadata, dict):
+        raise ValueError("ChromaDB returned invalid metadata for its child-chunk example.")
+    if metadata.get("speaker") != CHILD_EXAMPLE_SPEAKER:
+        raise ValueError(
+            f"Selected child chunk is not attributed to {CHILD_EXAMPLE_SPEAKER}."
+        )
+    missing_fields = set(CHILD_METADATA_FIELDS) - metadata.keys()
+    if missing_fields:
+        raise ValueError(
+            "ChromaDB child-chunk example is missing metadata fields: "
+            + ", ".join(sorted(missing_fields))
+        )
+    return {
+        "id": ids[0],
+        "document": documents[0],
+        "metadata": {
+            field: metadata[field] for field in CHILD_METADATA_FIELDS
+        },
+    }
+
+
+def parent_text_excerpt(text: str, max_length: int = 1350) -> str:
+    """Keep the displayed real parent text example concise."""
+    excerpt = text[:max_length].rstrip()
+    return f"{excerpt}..."
 
 
 def run_analysis_query(
@@ -114,6 +195,24 @@ def render_inventory() -> None:
             f"Embedding model: `{EMBEDDING_MODEL}`. "
             "This is a schema view; individual vectors are not listed or modified."
         )
+        try:
+            child_example = load_child_chunk_example()
+        except (OSError, ValueError) as error:
+            st.error(f"Could not read a child-chunk example from ChromaDB: {error}")
+            child_example = None
+        if child_example:
+            st.markdown(
+                f"**Example — one real child chunk ({CHILD_EXAMPLE_SPEAKER})**"
+            )
+            st.json({
+                **child_example,
+                "embedding": "384-dimensional vector (omitted)",
+            })
+        else:
+            st.info(
+                f"No child-chunk example for {CHILD_EXAMPLE_SPEAKER} is available "
+                "in the ChromaDB collection."
+            )
 
     with parent_tab:
         st.subheader("Parent chunk lookup")
@@ -124,12 +223,27 @@ def render_inventory() -> None:
             language="python",
         )
         try:
-            summary = load_parent_lookup_summary()
+            lookup = load_parent_lookup()
         except (OSError, json.JSONDecodeError, ValueError) as error:
             st.error(f"Could not inspect `parent_lookup.json`: {error}")
         else:
-            if summary["exists"]:
-                st.caption(f"{summary['entry_count']:,} parent text entries (read-only).")
+            if lookup is not None:
+                st.caption(f"{len(lookup):,} parent text entries (read-only).")
+                if child_example:
+                    parent_id = child_example["metadata"].get("parent_id")
+                    parent_text = lookup.get(parent_id)
+                    if parent_id and parent_text:
+                        st.markdown("**Example — matching real parent lookup entry**")
+                        st.json({
+                            parent_id: parent_text_excerpt(parent_text),
+                        })
+                    else:
+                        st.info(
+                            "The selected child chunk has no matching parent text "
+                            "in `parent_lookup.json`."
+                        )
+                else:
+                    st.info("No child chunk is available to match to a parent entry.")
             else:
                 st.info("`parent_lookup.json` was not found.")
 
