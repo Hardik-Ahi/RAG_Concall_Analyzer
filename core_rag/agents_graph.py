@@ -265,12 +265,12 @@ class LangGraphFinancialSwarm:
             raw_evidence += f"=== EVIDENCE BASE FOR {ticker} ===\n{data}\n\n"
 
         prompt = (
-            "You are an expert financial analyst. Use only the provided evidence to answer the "
-            "user's query. Produce section headings and Markdown bullet points. "
+            "You are an expert financial analyst. Use only and all of the provided evidence to answer the "
+            "user's query. Produce Markdown bullet points and a final summary."
             "Map a source ID marker to each provided citation source (which is a Python dictionary) in the form S1, S2, etc. "
-            "End every factual bullet with one or more exact source ID markers. "
-            "For combined claims, include every relevant source ID marker. "
-            "Do not make claims that lack a source ID. And at the end, list the mapping of all source ID markers to original citation dictionaries with all fields included.\n\n"
+            "Write your entire response with the singular aim of covering each source ID marker in your answer."
+            "End every bullet with one or more source ID markers like [S1], [S2] etc. "
+            "Do not make claims that lack a source ID marker. And at the end, list the mapping of all source ID markers (S1, S2, etc.) to original citation dictionaries.\n\n"
             f"Evidence:\n{raw_evidence}\n"
             f"User query: {state['user_query']}\n"
             f"Citation sources: {json.dumps(state['citation_sources'], indent=4)}\n"
@@ -278,12 +278,14 @@ class LangGraphFinancialSwarm:
         
         # For LangGraph prototypes running locally, we can capture the complete text output block cleanly
         response = self.critic_llm.invoke(prompt)
-        return {
+        return {"final_report": response.content}
+
+        '''{
             "final_report": render_citations(
                 response.content,
                 state["citation_sources"]
             )
-        }
+        }'''
 
     # =====================================================================
     # 3. ASSEMBLING THE COMPILATION GRAPH STATE MACHINE
