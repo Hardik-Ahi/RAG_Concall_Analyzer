@@ -109,15 +109,14 @@ class LangGraphFinancialSwarm:
             time_list_prompt = (
                 f"Current year and month: {current_date}.\n"
                 f"Parse the requested time period from this user query: {state['user_query']!r}\n"
-                "Return ONLY a JSON array of strings, with every requested month represented "
-                'as "YYYY_MM" (for example: ["2026_06", "2026_07"]).\n'
+                "Return ONLY a JSON array of strings, with every requested month represented as 'YYYY_MM'.\n"
                 "Rules:\n"
-                "- Convert each explicitly named or listed month to its corresponding YYYY_MM value.\n"
-                "- Expand explicit date ranges inclusively, including both endpoint months.\n"
+                "- Convert each explicitly named or listed month in the user query to its corresponding YYYY_MM value.\n"
                 "- If the query specifies a year without a month, include all 12 months of that year.\n"
-                "- Do not return an empty array."
+                "- Do not return an empty array. Do not write anything else besides the JSON array. Do not include markdown fences.\n"
             )
             time_list_response = self.llm.invoke(time_list_prompt)
+            print(f"🧩 [NODE 0: ROUTER] Time List response: {time_list_response.content}")
             time_list = parse_json_response(time_list_response.content)
             time_filter = {**mode_filter, "time_list": time_list}
 
@@ -294,11 +293,11 @@ class LangGraphFinancialSwarm:
             raw_evidence += f"=== EVIDENCE BASE FOR {ticker} ===\n{data}\n\n"
 
         prompt = (
-            "You are an expert financial analyst. Use only and all of the provided evidence to answer the "
+            "You are an expert financial analyst. Use the provided evidence to answer the "
             "user's query. Produce Markdown bullet points and a final summary."
             "Map a source ID marker to each provided citation source (which is a Python dictionary) in the form S1, S2, etc. "
             "Write your entire response with the singular aim of covering each source ID marker in your answer."
-            "End every bullet with one or more source ID markers like [S1], [S2] etc. "
+            "End every bullet with corresponding source ID markers like [S1], [S2] etc. A bullet can have one or more markers. "
             "Do not make claims that lack a source ID marker. And at the end, list the mapping of all source ID markers (S1, S2, etc.) to original citation dictionaries.\n\n"
             f"Evidence:\n{raw_evidence}\n"
             f"User query: {state['user_query']}\n"
