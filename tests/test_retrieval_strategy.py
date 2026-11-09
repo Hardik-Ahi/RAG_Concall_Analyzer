@@ -1,3 +1,4 @@
+import json
 import io
 import unittest
 from contextlib import redirect_stdout
@@ -24,7 +25,16 @@ class FakeLLM:
     def invoke(self, prompt):
         if "Decide whether this transcript parent" in prompt:
             return SimpleNamespace(content='{"is_question": false}')
-        return SimpleNamespace(content="- Claim. [[S1]]")
+        return SimpleNamespace(content='["Claim."]')
+
+    def with_structured_output(self, schema, method):
+        llm = self
+
+        class StructuredLLM:
+            def invoke(self, prompt):
+                return {"summaries": json.loads(llm.invoke(prompt).content)}
+
+        return StructuredLLM()
 
 
 class FakeRetrievalDB:

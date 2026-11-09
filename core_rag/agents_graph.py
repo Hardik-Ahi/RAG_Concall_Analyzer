@@ -12,6 +12,17 @@ from core_rag.retrieval import expand_question_parent_hits
 
 LLM_MODEL = "llama3.2"
 CRITIC_LLM_MODEL = "llama3.2"
+ANALYST_SUMMARY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summaries": {
+            "type": "array",
+            "items": {"type": "string"}
+        }
+    },
+    "required": ["summaries"],
+    "additionalProperties": False
+}
 
 
 class TimeFilter(TypedDict):
@@ -34,6 +45,7 @@ class AgentState(TypedDict):
     timeline_keys: Dict[str, List[str]] # maps ticker -> relevant file keys ["2025_07"]  // generalized for any timeline
     analyst_factual_outputs: Dict[str, str] # maps ticker -> clean facts
     citation_sources: Dict[str, Dict[str, str]]
+    parent_chunks: List[Dict[str, Any]]
     final_report: str
 
 # =====================================================================
@@ -163,9 +175,9 @@ class LangGraphFinancialSwarm:
 
     # --- NODE 1: THE RESEARCH ANALYST ---
     def node_research_analyst(self, state: AgentState) -> Dict[str, Any]:
+        parent_chunks_by_ticker = {}
         analyst_outputs = {}
         citation_sources = {}
-        source_ids_by_metadata = {}
         
         for ticker in state["target_tickers"]:
             print(f"Crypting 🕵️‍♂️ [NODE 1: ANALYST] Extracting factual profiles for {ticker}...")
@@ -224,96 +236,163 @@ class LangGraphFinancialSwarm:
                 meta = parent["metadata"]
                 p_id = parent["parent_id"]
 
-                citation_metadata = {}
-                for field in ("year", "month", "index", "page_number", "speaker", "speaker_number"):
+                for field in (
+                    "ticker", "year", "month", "index", "page_number", "speaker",
+                    "speaker_number"
+                ):
                     value = meta.get(field)
                     if value is None or not str(value).strip():
                         raise ValueError(
                             f"Retrieved child metadata for parent {p_id!r} is missing {field!r}."
                         )
-                    citation_metadata[field] = str(value).strip()
-
-                source_key = (ticker, *(citation_metadata[field] for field in (
-                    "year", "month", "index", "page_number", "speaker", "speaker_number"
-                )))
-                source_id = source_ids_by_metadata.get(source_key)
-                if source_id is None:
-                    source_id = f"S{len(citation_sources) + 1}"
-                    source_ids_by_metadata[source_key] = source_id
-                    citation_sources[source_id] = citation_metadata
 
                 if p_id not in parent_contexts:
                     parent_contexts[p_id] = {
-                        "text": parent["text"],
-                        "source_ids": []
+                        "parent_id": p_id,
+                        "content": parent["text"],
+                        **{
+                            key: str(value).strip()
+                            for key, value in meta.items()
+                            if value is not None
+                        }
                     }
-                if source_id not in parent_contexts[p_id]["source_ids"]:
-                    parent_contexts[p_id]["source_ids"].append(source_id)
 
-            if not parent_contexts:
-                analyst_outputs[ticker] = ""
+            parent_chunks = list(parent_contexts.values())
+            parent_chunks_by_ticker[ticker] = parent_chunks
+            if not parent_chunks:
                 continue
-                    
-            context_blocks = []
-            for item in parent_contexts.values():
-                source_markers = ", ".join(
-                    "[[{}]]".format(source_id) for source_id in item["source_ids"]
-                )
-                context_blocks.append(
-                    f"Source IDs: {source_markers}\n{item['text']}"
-                )
 
-            compiled_context = "\n\n---\n\n".join(context_blocks)
-            
             prompt = (
-                "Extract factual claims based ONLY on the evidence below. Return Markdown bullet points. "
-                "End every bullet with one or more exact source ID markers shown with that evidence. "
-                "Do not invent, alter, or omit source IDs.\n\n"
-                f"{compiled_context}\n\n"
-                f"Focus on fulfilling this target: {state['user_query']}"
+                "You are a JSON formatter. For each text in the input list, write exactly one concise factual summary text, with respect to the user query. "
+                "Preserve every hard number, date, and metric that matters. If a text contains "
+                "no information relevant to the user query, place an empty string at that same position. "
+                "Return a JSON object with exactly one field named 'summaries', whose value is "
+                "an array of strings in exactly the same order and length as the input list. "
+                "Do not add markdown fences or any other text.\n\n"
+                f"User query: {state['user_query']}\n"
+                f"Texts in order: "
+                f"{json.dumps([parent['content'] for parent in parent_chunks], ensure_ascii=False)}"
             )
-            
-            response = self.llm.invoke(prompt)
-            analyst_outputs[ticker] = response.content
+
+            summary_schema = {
+                **ANALYST_SUMMARY_SCHEMA,
+                "properties": {
+                    "summaries": {
+                        **ANALYST_SUMMARY_SCHEMA["properties"]["summaries"],
+                        "minItems": len(parent_chunks),
+                        "maxItems": len(parent_chunks)
+                    }
+                }
+            }
+            structured_llm = self.llm.with_structured_output(
+                summary_schema,
+                method="json_schema"
+            )
+            structured_response = structured_llm.invoke(prompt)
+            if not isinstance(structured_response, dict) or set(structured_response) != {
+                "summaries"
+            }:
+                raise ValueError(
+                    f"Research analyst response for ticker {ticker!r} must contain exactly "
+                    "one field named 'summaries'."
+                )
+            summaries = structured_response["summaries"]
+            if (
+                not isinstance(summaries, list)
+                or len(summaries) != len(parent_chunks)
+                or any(not isinstance(summary, str) for summary in summaries)
+            ):
+                raise ValueError(
+                    f"Research analyst response for ticker {ticker!r} must contain exactly "
+                    f"{len(parent_chunks)} strings in parent order."
+                )
+            for parent, summary in zip(parent_chunks, summaries):
+                parent["content"] = summary.strip()
+
+        all_parent_chunks = []
+        for ticker in state["target_tickers"]:
+            ticker_chunks = parent_chunks_by_ticker.get(ticker, [])
+            for parent in ticker_chunks:
+                if parent["content"]:
+                    source_id = f"S{len(citation_sources) + 1}"
+                    parent["citation_number"] = source_id
+                    citation_sources[source_id] = {
+                        "parent_id": parent["parent_id"],
+                        **{
+                            field: parent[field]
+                            for field in (
+                                "ticker", "year", "month", "index", "page_number",
+                                "speaker", "speaker_number"
+                            )
+                        }
+                    }
+                else:
+                    parent["citation_number"] = None
+                all_parent_chunks.append(parent)
+
+            analyst_outputs[ticker] = "\n".join(
+                f"- {parent['content']} [[{parent['citation_number']}]]"
+                for parent in ticker_chunks
+                if parent["content"]
+            )
 
         return {
             "analyst_factual_outputs": analyst_outputs,
-            "citation_sources": citation_sources
+            "citation_sources": citation_sources,
+            "parent_chunks": all_parent_chunks
         }
 
     # --- NODE 2: THE FINANCIAL CRITIC ---
     def node_financial_critic(self, state: AgentState) -> Dict[str, Any]:
         print("⚖️ [NODE 2: CRITIC] Executing corporate landscape synthesis analysis...")
 
-        if not state["citation_sources"]:
+        relevant_chunks = [
+            {
+                key: value
+                for key, value in parent.items()
+                if key != "parent_id"
+            }
+            for parent in state["parent_chunks"]
+            if parent["content"]
+        ]
+        if not relevant_chunks:
             return {"final_report": "No source-backed evidence was retrieved for this query."}
-        
-        raw_evidence = ""
-        for ticker, data in state["analyst_factual_outputs"].items():
-            raw_evidence += f"=== EVIDENCE BASE FOR {ticker} ===\n{data}\n\n"
 
         prompt = (
-            "You are an expert financial analyst. Use the provided evidence to answer the "
-            "user's query. Produce Markdown bullet points and a final summary."
-            "Map a source ID marker to each provided citation source (which is a Python dictionary) in the form S1, S2, etc. "
-            "Write your entire response with the singular aim of covering each source ID marker in your answer."
-            "End every bullet with corresponding source ID markers like [S1], [S2] etc. A bullet can have one or more markers. "
-            "Do not make claims that lack a source ID marker. And at the end, list the mapping of all source ID markers (S1, S2, etc.) to original citation dictionaries.\n\n"
-            f"Evidence:\n{raw_evidence}\n"
+            "You are an expert financial analyst. Reformat the supplied summarized parent records "
+            "into a concise Markdown report that answers the user query. Organize into sections if "
+            "useful. Keep each summary's citation attached to its claim: every factual bullet must "
+            "end with that record's exact marker in the form [[S1]]. Do not invent, change, or move "
+            "citation numbers between records. Ignore records with empty content. Do not include "
+            "parent IDs or a citation-mapping appendix; the application adds that mapping.\n\n"
             f"User query: {state['user_query']}\n"
-            f"Citation sources: {json.dumps(state['citation_sources'], indent=4)}\n"
+            f"Summarized parent records: {json.dumps(relevant_chunks, ensure_ascii=False, indent=2)}"
         )
         
         # For LangGraph prototypes running locally, we can capture the complete text output block cleanly
         response = self.critic_llm.invoke(prompt)
-        return {"final_report": response.content}
-
-        '''{
-            "final_report": render_citations(
-                response.content,
-                state["citation_sources"]
+        rendered_report = render_citations(response.content, state["citation_sources"])
+        mapping_rows = [
+            "| {citation} | {ticker} | {year} | {month} | {index} | {page} | {speaker} | "
+            "{speaker_number} |".format(
+                citation=source_id,
+                ticker=metadata["ticker"],
+                year=metadata["year"],
+                month=metadata["month"],
+                index=metadata["index"],
+                page=metadata["page_number"],
+                speaker=metadata["speaker"],
+                speaker_number=metadata["speaker_number"],
             )
-        }'''
+            for source_id, metadata in state["citation_sources"].items()
+        ]
+        citation_mapping = (
+            "\n\n## Citation mapping\n\n"
+            "| Citation | Ticker | Year | Month | Index | Page | Speaker | Speaker number |\n"
+            "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+            + "\n".join(mapping_rows)
+        )
+        return {"final_report": f"{rendered_report}{citation_mapping}"}
 
     # =====================================================================
     # 3. ASSEMBLING THE COMPILATION GRAPH STATE MACHINE
@@ -372,6 +451,7 @@ class LangGraphFinancialSwarm:
             "timeline_keys": {},
             "analyst_factual_outputs": {},
             "citation_sources": {},
+            "parent_chunks": [],
             "final_report": ""
         }
 

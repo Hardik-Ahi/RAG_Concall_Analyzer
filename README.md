@@ -40,14 +40,18 @@ This system leverages a syntactically-aware parent-child document architecture a
 
 ### Citations in analysis responses
 
-The LangGraph analysis response adds an inline citation to each factual bullet. Citations are resolved
-from the metadata of the retrieved child chunks and use this format:
+The research analyst summarizes each retrieved parent chunk independently, preserving hard numbers
+and metrics. The application keeps each summary paired with its parent metadata and assigns a
+sequential citation number; the financial critic formats those summaries into a report. Each factual
+bullet receives an inline citation resolved from the retrieved parent metadata:
 
 `(year-month, index <index>, p. <page_number>)`
 
-For example: `- Revenue grew. (2025-07, index 2, p. 12)`. If a generated bullet does not include a
-valid source ID, or a retrieved source is missing required citation metadata, the graph reports an
-error rather than presenting an unsupported citation.
+For example: `- Revenue grew. (2025-07, index 2, p. 12, CEO)`. A citation-mapping appendix lists
+each `S1`, `S2`, etc. with its ticker, year, month, index, page, speaker, and speaker number;
+internal parent IDs are not exposed. If a generated bullet does not include a valid source ID, or a
+retrieved source is missing required citation metadata, the graph reports an error rather than
+presenting an unsupported citation.
 
 ### Streamlit frontend
 
