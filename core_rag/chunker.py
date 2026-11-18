@@ -3,7 +3,9 @@ import uuid
 from pathlib import Path
 import json
 import os
-from core_rag.vector_store import LocalVectorStorage
+import argparse
+from vector_store import LocalVectorStorage
+from pdf_parser import FinancialPDFParser
 
 class HierarchicalTranscriptChunker:
     def __init__(self):
@@ -159,3 +161,33 @@ class HierarchicalTranscriptChunker:
         with open(storage_path, "w") as f:
             json.dump(lookup_dict, f, indent=4)
         print(f"💾 Relational lookup dictionary saved to '{storage_path}'")
+
+if __name__ == "__main__":
+    argument_parser = argparse.ArgumentParser(
+        description="Parse PDF files and demonstrate the transcript chunking pipeline."
+    )
+    argument_parser.add_argument(
+        "pdf_files",
+        nargs="+",
+        help="One or more PDF filenames to parse and chunk.",
+    )
+    args = argument_parser.parse_args()
+
+    pdf_parser = FinancialPDFParser()
+    chunker = HierarchicalTranscriptChunker()
+    for pdf_file in args.pdf_files:
+        parsed_pages = pdf_parser.extract_clean_text(pdf_file)
+        metadata = chunker._extract_meta_from_filename(Path(pdf_file).name)
+        parent_chunks = chunker.build_parent_chunks(parsed_pages)
+        child_chunks = chunker.build_child_chunks(parent_chunks)
+        chunker.save_parent_lookup(parent_chunks, "test_parent_lookup.json")
+
+        print(f"\n--- Pipeline output for {Path(pdf_file).name} ---")
+        print("Metadata:")
+        print(json.dumps(metadata, ensure_ascii=False, indent=2))
+        print(f"Parsed pages (showing 2 from {len(parsed_pages)}):")
+        print(json.dumps(parsed_pages[20:22], ensure_ascii=False, indent=2))
+        print(f"Parent chunks (showing 2 from {len(parent_chunks)}):")
+        print(json.dumps(parent_chunks[20:22], ensure_ascii=False, indent=2))
+        print(f"Child chunks (showing 2 from {len(child_chunks)}):")
+        print(json.dumps(child_chunks[20:22], ensure_ascii=False, indent=2))
