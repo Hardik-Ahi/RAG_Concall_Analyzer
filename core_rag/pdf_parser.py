@@ -1,5 +1,7 @@
 import pymupdf
 from pathlib import Path
+import argparse
+import json
 
 class FinancialPDFParser:
     def __init__(self):
@@ -44,3 +46,20 @@ class FinancialPDFParser:
                     
         print(f"✅ Extracted data from {len(parsed_pages)} text-active pages.")
         return parsed_pages
+
+
+if __name__ == "__main__":
+    argument_parser = argparse.ArgumentParser(
+        description="Parse PDF files and print their extracted page structure."
+    )
+    argument_parser.add_argument(
+        "pdf_files",
+        nargs="+",
+        help="One or more PDF filenames to parse.",
+    )
+    args = argument_parser.parse_args()
+
+    pdf_parser = FinancialPDFParser()
+    for pdf_file in args.pdf_files:
+        parsed_pages = pdf_parser.extract_clean_text(pdf_file)
+        print(json.dumps(parsed_pages, ensure_ascii=False, indent=2))
