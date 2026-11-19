@@ -188,6 +188,6 @@ if __name__ == "__main__":
         print(f"Parsed pages (showing 2 from {len(parsed_pages)}):")
         print(json.dumps(parsed_pages[20:22], ensure_ascii=False, indent=2))
         print(f"Parent chunks (showing 2 from {len(parent_chunks)}):")
-        print(json.dumps(parent_chunks[20:22], ensure_ascii=False, indent=2))
+        print(json.dumps(parent_chunks[14:16], ensure_ascii=False, indent=2))
         print(f"Child chunks (showing 2 from {len(child_chunks)}):")
         print(json.dumps(child_chunks[20:22], ensure_ascii=False, indent=2))
