@@ -1,7 +1,6 @@
-import os
+import argparse
 import chromadb
 from chromadb.utils import embedding_functions
-from pathlib import Path
 from dotenv import load_dotenv
 
 CHROMA_COLLECTION_NAME = "infosys_financial_transcripts"
@@ -269,3 +268,36 @@ class LocalVectorStorage:
             if values is not None and len(values) == 1:
                 results[field] = values[0]
         return results
+
+
+if __name__ == "__main__":
+    argument_parser = argparse.ArgumentParser(
+        description="Parse PDF files, build transcript chunks, and index them in ChromaDB."
+    )
+    argument_parser.add_argument(
+        "pdf_files",
+        nargs="+",
+        help="One or more PDF filenames to parse and index.",
+    )
+    args = argument_parser.parse_args()
+
+    if __package__:
+        from .chunker import HierarchicalTranscriptChunker
+        from .pdf_parser import FinancialPDFParser
+    else:
+        from chunker import HierarchicalTranscriptChunker
+        from pdf_parser import FinancialPDFParser
+
+    pdf_parser = FinancialPDFParser()
+    chunker = HierarchicalTranscriptChunker()
+    child_chunks = []
+
+    for pdf_file in args.pdf_files:
+        parsed_pages = pdf_parser.extract_clean_text(pdf_file)
+        parent_chunks = chunker.build_parent_chunks(parsed_pages)
+        child_chunks.extend(chunker.build_child_chunks(parent_chunks))
+        chunker.save_parent_lookup(parent_chunks, "test_parent_lookup.json")
+
+    if child_chunks:
+        vector_store = LocalVectorStorage()
+        vector_store.index_child_chunks(child_chunks)

@@ -4,8 +4,6 @@ from pathlib import Path
 import json
 import os
 import argparse
-from vector_store import LocalVectorStorage
-from pdf_parser import FinancialPDFParser
 
 class HierarchicalTranscriptChunker:
     def __init__(self):
